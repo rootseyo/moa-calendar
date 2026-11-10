@@ -1,0 +1,1 @@
+Added home screen widgets (Month view and Schedule list)

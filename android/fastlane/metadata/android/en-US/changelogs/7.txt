@@ -1,0 +1,1 @@
+Support multi-day event bar display in monthly widget and stability improvements

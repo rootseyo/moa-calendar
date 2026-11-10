@@ -1,0 +1,92 @@
+[
+  {
+    "start": 60.5,
+    "end": 68.5,
+    "speed": 0.67,
+    "text": "1. Google sign-in uses OpenID to identify the account.\nGoogle Calendar access is authorized separately.",
+    "output_start": 0,
+    "duration": 11.940298507462686,
+    "output_end": 11.940298507462686,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-01.png"
+  },
+  {
+    "start": 78,
+    "end": 88,
+    "speed": 1,
+    "text": "Moa Calendar: optional Google Calendar import.\nThis demo uses a previously authorized account.",
+    "output_start": 11.940298507462686,
+    "duration": 10.0,
+    "output_end": 21.940298507462686,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-02.png"
+  },
+  {
+    "start": 151.5,
+    "end": 159.5,
+    "speed": 1,
+    "text": "2. Re-authorize Google Calendar access for the demo.\nThe same OAuth client is used for sign-in and calendar import.",
+    "output_start": 21.940298507462686,
+    "duration": 8.0,
+    "output_end": 29.940298507462686,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-03.png"
+  },
+  {
+    "start": 159.5,
+    "end": 170.5,
+    "speed": 0.5,
+    "text": "Requested scope: calendar.events.readonly\nRead-only event access; Google events are not modified.",
+    "output_start": 29.940298507462686,
+    "duration": 22.0,
+    "output_end": 51.940298507462686,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-04.png"
+  },
+  {
+    "start": 171.5,
+    "end": 175.5,
+    "speed": 1,
+    "text": "Google Calendar authorization is complete.\nThe app returns to the Moa calendar.",
+    "output_start": 51.940298507462686,
+    "duration": 4.0,
+    "output_end": 55.940298507462686,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-05.png"
+  },
+  {
+    "start": 227,
+    "end": 237,
+    "speed": 1,
+    "text": "3. Create the destination calendar: OAuth Review Demo.\nThis demo calendar has only one member.",
+    "output_start": 55.940298507462686,
+    "duration": 10.0,
+    "output_end": 65.94029850746269,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-06.png"
+  },
+  {
+    "start": 237,
+    "end": 254,
+    "speed": 1,
+    "text": "4. Select an import range and acknowledge sharing.\nImported titles, times and notes are visible to calendar members.",
+    "output_start": 65.94029850746269,
+    "duration": 17.0,
+    "output_end": 82.94029850746269,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-07.png"
+  },
+  {
+    "start": 254,
+    "end": 268,
+    "speed": 1,
+    "text": "5. Import succeeded: one event was copied from Google Calendar.\nOAuth Demo Meeting appears in the destination calendar.",
+    "output_start": 82.94029850746269,
+    "duration": 14.0,
+    "output_end": 96.94029850746269,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-08.png"
+  },
+  {
+    "start": 268,
+    "end": 283,
+    "speed": 1,
+    "text": "The imported event shows its title, 21:30-22:30 KST time and description.\nMoa reads these fields using events.list for the primary Google calendar.",
+    "output_start": 96.94029850746269,
+    "duration": 15.0,
+    "output_end": 111.94029850746269,
+    "image": "/Users/sean/work/share_schedule/docs/oauth-video-review/caption-09.png"
+  }
+]

@@ -1,0 +1,44 @@
+1
+00:00:00,000 --> 00:00:11,940
+1. Google sign-in uses OpenID to identify the account.
+Google Calendar access is authorized separately.
+
+2
+00:00:11,940 --> 00:00:21,940
+Moa Calendar: optional Google Calendar import.
+This demo uses a previously authorized account.
+
+3
+00:00:21,940 --> 00:00:29,940
+2. Re-authorize Google Calendar access for the demo.
+The same OAuth client is used for sign-in and calendar import.
+
+4
+00:00:29,940 --> 00:00:51,940
+Requested scope: calendar.events.readonly
+Read-only event access; Google events are not modified.
+
+5
+00:00:51,940 --> 00:00:55,940
+Google Calendar authorization is complete.
+The app returns to the Moa calendar.
+
+6
+00:00:55,940 --> 00:01:05,940
+3. Create the destination calendar: OAuth Review Demo.
+This demo calendar has only one member.
+
+7
+00:01:05,940 --> 00:01:22,940
+4. Select an import range and acknowledge sharing.
+Imported titles, times and notes are visible to calendar members.
+
+8
+00:01:22,940 --> 00:01:36,940
+5. Import succeeded: one event was copied from Google Calendar.
+OAuth Demo Meeting appears in the destination calendar.
+
+9
+00:01:36,940 --> 00:01:51,940
+The imported event shows its title, 21:30-22:30 KST time and description.
+Moa reads these fields using events.list for the primary Google calendar.

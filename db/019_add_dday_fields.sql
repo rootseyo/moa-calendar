@@ -1,0 +1,6 @@
+BEGIN;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS is_dday boolean NOT NULL DEFAULT false;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS is_cancelled boolean NOT NULL DEFAULT false;
+
+INSERT INTO schema_migrations(version) VALUES(19) ON CONFLICT DO NOTHING;
+COMMIT;

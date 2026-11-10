@@ -1,0 +1,24 @@
+{
+  "name": "moa-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "dev": "DEMO_MODE=true node --env-file-if-exists=.env server.mjs",
+    "test": "node --env-file-if-exists=.env --test",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
+    "build:macos": "./scripts/build-macos-app.sh"
+  },
+  "dependencies": {
+    "korean-lunar-calendar": "0.4.0",
+    "pg": "^8.21.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.14"
+  }
+}

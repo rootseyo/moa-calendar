@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive layer; artwork uses the same proportions as the web icon. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/moa_launcher_glyph"
+    android:gravity="fill"
+    android:filter="true" />

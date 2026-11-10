@@ -1,0 +1,10 @@
+BEGIN;
+DELETE FROM events WHERE timetable_id IS NOT NULL;
+DROP TABLE IF EXISTS timetable_lessons CASCADE;
+DROP TABLE IF EXISTS timetables CASCADE;
+ALTER TABLE events DROP COLUMN IF EXISTS timetable_id;
+ALTER TABLE events DROP COLUMN IF EXISTS lesson_id;
+ALTER TABLE events DROP COLUMN IF EXISTS occurrence_date;
+ALTER TABLE events DROP COLUMN IF EXISTS timetable_exception;
+INSERT INTO schema_migrations(version) VALUES(26) ON CONFLICT DO NOTHING;
+COMMIT;

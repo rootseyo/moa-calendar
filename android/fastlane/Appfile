@@ -1,0 +1,5 @@
+# Google Play Console JSON 키 파일 경로
+json_key_file(ENV["PLAY_STORE_JSON_KEY"] || "fastlane/play-store-credentials.json")
+
+# 안드로이드 애플리케이션 패키지 ID
+package_name("kr.brightnetworks.dwm")

@@ -1,0 +1,78 @@
+# ==========================================
+# Moa Calendar (.gitignore)
+# ==========================================
+
+# 1. Environment variables & Secrets
+.env
+.env.*
+.env.local
+!.env.example
+
+# Service account & cloud credentials
+gcp_service_key.json
+!gcp_service_key.json.example
+
+# Keystores & private certificates
+*.jks
+*.keystore
+*.pem
+*.p12
+*.p8
+*.key
+
+# 2. Local Database & Runtime Data
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.dump
+
+# 3. Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# 4. OS & IDE artifacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 5. Logs & Backups
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tar.gz
+*-backup*
+
+# 6. macOS App Build Output
+macos/build/
+
+# 7. Android App Build & Credentials
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+!android/keystore.properties.example
+android/fastlane/*.json
+!android/fastlane/*.json.example
+android/fastlane/report.xml
+android/fastlane/Preview.html
+android/fastlane/screenshots/
+android/.bundle/
+android/vendor/bundle/
+
+# 8. Private Server Custom Deploy Scripts (personal infrastructure)
+scripts/apply-oauth.sh
+scripts/deploy-language.sh
+scripts/deploy-oauth.sh
+scripts/backup-oauth-db.mjs

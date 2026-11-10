@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>모아 캘린더 | 함께 쓰는 실시간 공유 캘린더</title>
+<meta name="description" content="가족, 친구, 팀의 일정을 한곳에서 모아보세요. 모아 캘린더는 초대 링크로 함께 참여하고 월간·주간·일간 보기에서 실시간으로 일정을 공유하는 캘린더입니다.">
+<meta name="robots" content="__ROBOTS__">
+<meta name="application-name" content="모아 캘린더">
+<meta name="theme-color" content="#38664e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="모아 캘린더">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="canonical" href="__PAGE_URL__">
+<link rel="alternate" hreflang="ko" href="__SITE_URL__/ko/">
+<link rel="alternate" hreflang="en" href="__SITE_URL__/en/">
+<link rel="alternate" hreflang="x-default" href="__SITE_URL__/">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/favicon-48.png" type="image/png" sizes="48x48">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:site_name" content="모아 캘린더">
+<meta property="og:title" content="모아 캘린더 | 함께 쓰는 실시간 공유 캘린더">
+<meta property="og:description" content="각자의 하루를, 우리의 시간으로. 링크 하나로 초대하고 실시간으로 일정을 공유하세요.">
+<meta property="og:url" content="__PAGE_URL__">
+<meta property="og:image" content="__SITE_URL__/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="모아 캘린더 — 각자의 하루를, 우리의 시간으로">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="모아 캘린더 | 함께 쓰는 실시간 공유 캘린더">
+<meta name="twitter:description" content="링크 하나로 초대하고 실시간으로 일정을 공유하세요.">
+<meta name="twitter:image" content="__SITE_URL__/og-image.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"__SITE_URL__/#website","url":"__SITE_URL__/","name":"모아 캘린더","inLanguage":"ko"},{"@type":"WebApplication","name":"모아 캘린더","url":"__SITE_URL__/","applicationCategory":"ProductivityApplication","operatingSystem":"Web","inLanguage":"ko","description":"가족, 친구, 팀과 초대 링크로 참여하고 실시간으로 일정을 공유하는 캘린더"}]}</script>
+<link rel="stylesheet" href="/style.css?v=20261102-time-range-v1">
+<script type="module" src="/locale.js?v=20261102-time-range-v1"></script>
+<script defer src="/analytics.js?v=20261028-csp-v1"></script>
+</head>
+<body><div id="app"><div class="workspace" id="workspace-root"><aside class="sidebar" id="main-sidebar" aria-label="캘린더 메뉴"><div class="sidebar-content" id="sidebar-content"><a class="brand sidebar-brand" href="/"><span class="brand-mark">m</span><span class="sidebar-brand-name">모아</span></a><button class="primary full" id="new-event" disabled>＋ 일정 만들기</button><div class="nav-caption">MY SPACE</div><div class="nav-active">▦ <span>공유 캘린더</span></div><div class="calendar-heading"><span>내 캘린더</span></div><div id="calendar-list"><div class="calendar-item active"><span class="dot"></span><span>내 캘린더</span></div></div></div></aside><main class="main"><header class="topbar"><div class="calendar-title-group"><h1 class="calendar-title">내 캘린더</h1></div></header><div class="workspace-body"><section class="calendar-section"><div class="calendar-toolbar"><div class="month-heading"><h2 id="month-title"></h2></div><div class="calendar-view-controls"><button class="today-button" id="today">오늘</button><div class="view-mode-group" role="tablist" aria-label="캘린더 보기 형식"><button class="view-btn" data-view="day">일간</button><button class="view-btn" data-view="week">주간</button><button class="view-btn active" data-view="month">월간</button></div></div></div><div class="calendar-meta"><span id="sync-status" role="status">캘린더 연결 중...</span></div><div id="calendar"><div class="weekdays"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div class="month-grid"><div class="day outside"><div class="day-number"></div></div><div class="day outside"><div class="day-number"></div></div><div class="day outside"><div class="day-number"></div></div><div class="day"><div class="day-number">1</div></div><div class="day"><div class="day-number">2</div></div><div class="day"><div class="day-number">3</div></div><div class="day"><div class="day-number">4</div></div><div class="day"><div class="day-number">5</div></div><div class="day"><div class="day-number">6</div></div><div class="day"><div class="day-number">7</div></div><div class="day"><div class="day-number">8</div></div><div class="day"><div class="day-number">9</div></div><div class="day"><div class="day-number">10</div></div><div class="day"><div class="day-number">11</div></div><div class="day"><div class="day-number">12</div></div><div class="day"><div class="day-number">13</div></div><div class="day"><div class="day-number">14</div></div><div class="day"><div class="day-number">15</div></div><div class="day"><div class="day-number">16</div></div><div class="day"><div class="day-number">17</div></div><div class="day"><div class="day-number">18</div></div><div class="day"><div class="day-number">19</div></div><div class="day"><div class="day-number">20</div></div><div class="day"><div class="day-number">21</div></div><div class="day"><div class="day-number">22</div></div><div class="day"><div class="day-number">23</div></div><div class="day"><div class="day-number">24</div></div><div class="day"><div class="day-number">25</div></div><div class="day"><div class="day-number">26</div></div><div class="day"><div class="day-number">27</div></div><div class="day"><div class="day-number">28</div></div><div class="day"><div class="day-number">29</div></div><div class="day"><div class="day-number">30</div></div><div class="day"><div class="day-number">31</div></div><div class="day outside"><div class="day-number"></div></div></div></div></section><aside class="right-panel" id="details-panel" aria-label="캘린더 정보"><section class="agenda"><div class="section-title"><h3 id="agenda-date">오늘의 일정</h3></div><div id="agenda-list"><div class="empty-agenda"><span class="empty-icon">▦</span><p>일정을 불러오는 중입니다...</p></div></div></section></aside></div></main></div><noscript><p>로그인하고 캘린더를 사용하려면 브라우저에서 자바스크립트를 활성화해 주세요.</p></noscript></div><div id="toast" role="status" aria-live="polite"></div>
+<div id="settings-page" class="settings-page" hidden>
+ <header class="settings-topbar"><a class="brand" href="/" data-settings-return><span class="brand-mark">m</span><span>모아</span></a><a class="settings-return" href="/" data-settings-return>← 캘린더로 돌아가기</a></header>
+ <div class="settings-layout">
+  <aside class="settings-sidebar"><div class="settings-sidebar-heading"><span class="eyebrow">YOUR SPACE</span><div class="settings-sidebar-title">설정</div><p>나에게 맞는 캘린더를 만들어보세요.</p></div>
+   <nav aria-label="설정 메뉴" id="settings-navigation">
+    <span class="settings-nav-label">캘린더</span>
+    <a href="/settings/calendars" data-settings-section="calendars"><span data-settings-icon="month"></span>캘린더 관리</a>
+    <a href="/settings/icloud" data-settings-section="icloud"><span data-settings-icon="cloud"></span>iCloud 캘린더 연동</a>
+    <a href="/settings/google" data-settings-section="google"><span data-settings-icon="import"></span>Google 캘린더 가져오기</a>
+    <a href="/settings/migrate" data-settings-section="migrate"><span data-settings-icon="import"></span>캘린더 모으기</a>
+    <span class="settings-nav-label">내 계정</span>
+    <a href="/settings/account" data-settings-section="account"><span data-settings-icon="profile"></span>계정 및 프로필</a>
+    <a href="/settings/preferences" data-settings-section="preferences"><span data-settings-icon="preferences"></span>언어 및 지역</a>
+    <a href="/settings/sessions" data-settings-section="sessions"><span data-settings-icon="sessions"></span>함께 보는 세션</a>
+   </nav>
+   <div class="settings-user"><span class="avatar" id="settings-user-avatar"></span><div><strong id="settings-user-name"></strong><small>나의 공간</small></div></div>
+  </aside>
+  <main class="settings-main">
+   <label class="settings-mobile-selector">설정 메뉴<select id="settings-mobile-navigation"><option value="calendars">캘린더 관리</option><option value="icloud">iCloud 캘린더 연동</option><option value="google">Google 캘린더 가져오기</option><option value="migrate">캘린더 모으기</option><option value="account">계정 및 프로필</option><option value="preferences">언어 및 지역</option><option value="sessions">함께 보는 세션</option></select></label>
+   <div class="settings-page-heading"><span class="eyebrow">SETTINGS</span><h1 id="settings-page-title" tabindex="-1"></h1><p id="settings-page-description"></p></div>
+   <section data-settings-panel="calendars" hidden><div class="settings-section-toolbar"><span class="settings-context-pill" id="settings-calendar-count"></span><button class="primary" type="button" data-settings-create>＋ 새 캘린더</button></div><p class="settings-order-note">위·아래 버튼으로 순서를 변경하세요. 첫 번째로 편집 가능한 캘린더에 새 일정과 복사한 일정을 저장합니다.</p><div class="settings-card" data-settings-mount="calendar-management-dialog"></div></section>
+   <section data-settings-panel="calendar" hidden><a class="settings-inline-back" href="/settings/calendars" data-settings-section="calendars">← 캘린더 목록</a><div class="settings-card" data-settings-mount="calendar-details-dialog"></div></section>
+   <section data-settings-panel="icloud" hidden><p id="settings-sync-interval" class="settings-sync-note">iCloud는 기본 15분마다 자동 동기화됩니다. 필요할 때 ‘지금 동기화’를 사용할 수 있어요.</p>
+    <div class="settings-icloud-layout"><div class="settings-card settings-connection-card" data-settings-mount="calendar-integrations-dialog"></div>
+     <aside class="settings-card apple-password-guide" aria-labelledby="apple-password-guide-title"><span class="settings-guide-tag">연결 전 준비</span><h3 id="apple-password-guide-title">Apple 앱 암호 발급하기</h3><p>앱 암호는 모아에서 iCloud 캘린더에 접근할 때 사용하는 전용 암호예요.</p>
+      <ol class="settings-guide-steps"><li><strong>Apple 계정에 로그인</strong><p><a href="https://account.apple.com/" target="_blank" rel="noopener noreferrer">account.apple.com ↗</a>에 접속해 캘린더를 사용하는 계정으로 로그인하세요.</p></li><li><strong>로그인 및 보안 → 앱 암호</strong><p>계정 설정에서 ‘앱 암호’를 선택하세요. 앱 암호를 만들려면 이중 인증이 켜져 있어야 해요.</p></li><li><strong>앱 암호 생성</strong><p>‘앱 암호 생성’을 선택하고 이름을 ‘모아 캘린더’로 입력한 뒤 화면의 안내를 따라주세요.</p></li><li><strong>발급된 암호로 연결</strong><p>발급된 암호를 복사해 ‘Apple 앱 암호’ 입력란에 붙여넣으세요.</p></li></ol>
+      <details class="settings-help"><summary>앱 암호가 보이지 않거나 연결이 안 되나요?</summary><p>Apple 계정의 이중 인증을 먼저 확인하세요. 계정의 기본 암호를 변경하거나 재설정했다면 기존 앱 암호가 모두 취소되므로 새로 발급해 연결해야 해요.</p><p>앱 암호를 삭제하려면 Apple 계정의 ‘로그인 및 보안 → 앱 암호’에서 해당 암호를 제거하세요.</p></details>
+      <a class="settings-support-link" href="https://support.apple.com/ko-kr/102654" target="_blank" rel="noopener noreferrer">Apple 공식 앱 암호 안내 ↗</a>
+     </aside></div>
+   </section>
+   <section data-settings-panel="google" hidden><div class="settings-card settings-narrow-card" data-settings-mount="google-import-dialog"></div></section>
+   <section data-settings-panel="migrate" hidden>
+    <div class="settings-card migration-intro"><h3>여러 캘린더의 일정을 한곳으로</h3><p>Google, iCloud와 모아의 일정을 선택한 모아 캘린더에 복사하세요. 원본은 유지되며 이후의 변경은 자동으로 반영되지 않습니다.</p><p>반복 일정은 선택한 기간의 개별 일정으로 가져옵니다. 한 번 가져온 원본 일정은 같은 대상에 다시 추가하지 않습니다.</p></div>
+    <form id="migration-preview-form" class="settings-card migration-form">
+     <div class="migration-step-heading"><span>1</span><h3>일정을 모을 캘린더</h3></div>
+     <label for="migration-target">기존 모아 캘린더<select id="migration-target" required><option value="">캘린더를 불러오는 중…</option></select></label>
+     <p class="settings-field-hint">편집할 수 있는 모아 캘린더를 선택하세요. 외부 동기화 캘린더는 대상에 포함되지 않습니다.</p>
+     <div class="migration-step-heading"><span>2</span><h3>가져올 캘린더와 기간</h3></div>
+     <div class="migration-sources-toolbar"><span>여러 캘린더를 선택할 수 있어요.</span><button type="button" class="text-button" id="migration-select-all">전체 선택</button></div>
+     <div id="migration-source-status" role="status" aria-live="polite"></div><div id="migration-sources"></div>
+     <div class="migration-date-fields"><label for="migration-from">시작일<input type="date" id="migration-from" required></label><label for="migration-to">종료일<input type="date" id="migration-to" required></label></div>
+     <label class="migration-checkbox"><input type="checkbox" id="migration-deduplicate" checked><span>제목·시작·종료가 같은 일정은 하나만 가져오기</span></label>
+     <p id="migration-error" class="form-error" role="alert"></p><button type="submit" id="migration-preview-btn" class="primary full" disabled>가져올 일정 미리보기</button>
+    </form>
+    <div id="migration-preview" class="settings-card migration-preview" hidden>
+     <div class="migration-step-heading"><span>3</span><h3>확인하고 가져오기</h3></div><p id="migration-preview-summary"></p><div id="migration-preview-counts"></div>
+     <label class="migration-checkbox"><input type="checkbox" id="migration-share-consent"><span>가져온 일정이 대상 캘린더 참여자에게 공유되는 것을 확인했습니다.</span></label>
+     <button type="button" id="migration-commit-btn" class="primary full" disabled>선택한 캘린더로 가져오기</button>
+    </div>
+    <div id="migration-result" class="settings-card migration-result" hidden role="status" aria-live="polite"><h3>일정을 한곳에 모았어요</h3><p id="migration-result-summary"></p><button type="button" class="secondary" id="migration-view-target">대상 캘린더 보기</button></div>
+   </section>
+   <section data-settings-panel="account" hidden><div class="settings-card settings-narrow-card" data-settings-mount="mobile-profile-dialog"></div></section>
+   <section data-settings-panel="preferences" hidden>
+    <div class="settings-card settings-narrow-card"><h3>화면에 맞는 언어와 공휴일</h3><p class="settings-card-description">표시 언어와 공휴일을 확인할 지역을 선택하세요.</p><div id="settings-preferences-mount"></div><div id="lunar-settings" class="lunar-settings"><label class="migration-checkbox"><input type="checkbox" id="lunar-display-toggle"><span><strong>한국 음력 날짜 표시</strong><small id="lunar-display-description">한국 지역에서 음력 날짜와 윤달을 표시합니다. 2050년까지 지원합니다.</small></span></label></div><p class="settings-preference-note">설정을 변경하면 화면에 바로 적용됩니다.</p></div>
+    <div class="settings-card settings-narrow-card" id="weather-settings-card"><h3>날씨 및 위치 설정</h3><p class="settings-card-description">달력 날짜 옆에 예상 날씨 이모지와 비 올 확률을 표시할 위치를 설정하세요.</p><label class="migration-checkbox"><input type="checkbox" id="weather-display-toggle" checked><span><strong>달력에 예상 날씨 표시</strong><small id="weather-display-description">예보 기간의 날씨 이모지와 강수 확률을 날짜 옆에 표시합니다.</small></span></label><div class="weather-location-controls" id="weather-location-controls"><label for="weather-location-select">날씨 위치 선택<select id="weather-location-select" aria-label="날씨 위치 선택"></select></label><div class="weather-location-search-group"><label for="weather-location-query">다른 도시·지역 검색</label><div class="weather-location-search-row"><input type="search" id="weather-location-query" maxlength="80" placeholder="도시 이름 입력 (예: 수원, 성남, 제주, 도쿄)" autocomplete="off"><button type="button" id="weather-location-search-btn" class="secondary">검색</button><button type="button" id="weather-geolocate-btn" class="secondary" title="현재 위치 사용">📍 현재 위치</button></div></div><div id="weather-location-results" class="weather-location-results" hidden></div><p id="weather-location-status" class="settings-preference-note" role="status" aria-live="polite"></p></div></div>
+    <div class="settings-card settings-narrow-card" id="push-settings-card"><h3>알림 설정</h3><p class="settings-card-description">브라우저나 탭을 닫아도 일정 리마인더와 공유 캘린더 활동 알림을 받습니다.</p><label class="migration-checkbox"><input type="checkbox" id="push-notification-toggle"><span><strong id="push-notification-toggle-label">웹 푸시 알림 받기</strong><small id="push-status-text">알림 상태 확인 중…</small></span></label><div id="push-test-action" style="margin-top:14px;display:flex;align-items:center;gap:10px" hidden><button type="button" id="push-test-btn" class="secondary">테스트 알림 보내기</button><span id="push-test-result" class="muted small" role="status"></span></div><p id="push-ios-hint" class="settings-preference-note" style="margin-top:10px" hidden>💡 iPhone/iPad는 Safari 공유 메뉴에서 <strong>'홈 화면에 추가'</strong> 후 실행하면 백그라운드 푸시 알림을 받을 수 있습니다.</p></div>
+   </section>
+   <section data-settings-panel="sessions" hidden><div class="settings-card settings-narrow-card" data-settings-mount="mobile-sessions-dialog"></div></section>
+  </main>
+ </div>
+</div>
+<div id="calendar-color-popover" class="calendar-color-popover" hidden role="dialog" aria-label="캘린더 색상 선택"><div class="calendar-color-popover-grid" id="calendar-color-popover-grid"></div></div>
+<dialog id="event-dialog"><form id="event-form"><div class="dialog-heading"><h2 id="event-heading" class="sr-only">새로운 일정</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div><p id="event-sync-status" class="muted small" role="status"></p><label id="event-calendar-select-label">캘린더 선택<select name="calendar_id" id="event-calendar-select"></select></label><label>일정 제목<input name="title" maxlength="100" placeholder="어떤 시간을 함께할까요?" required></label><label>카테고리<input name="category" maxlength="50" placeholder="예: 업무, 개인, 회의, 미팅" list="category-suggestions"></label>
+<fieldset class="event-color-picker"><legend>일정 색상</legend><div class="event-color-options">
+<label class="event-color-option" title="초록색"><input class="sr-only" type="radio" name="color" value="sage" aria-label="초록색" checked><span class="event-color-swatch sage" aria-hidden="true"></span></label>
+<label class="event-color-option" title="파란색"><input class="sr-only" type="radio" name="color" value="blue" aria-label="파란색"><span class="event-color-swatch blue" aria-hidden="true"></span></label>
+<label class="event-color-option" title="살구색"><input class="sr-only" type="radio" name="color" value="peach" aria-label="살구색"><span class="event-color-swatch peach" aria-hidden="true"></span></label>
+<label class="event-color-option" title="보라색"><input class="sr-only" type="radio" name="color" value="lavender" aria-label="보라색"><span class="event-color-swatch lavender" aria-hidden="true"></span></label>
+<label class="event-color-option" title="빨간색"><input class="sr-only" type="radio" name="color" value="coral" aria-label="빨간색"><span class="event-color-swatch coral" aria-hidden="true"></span></label>
+<label class="event-color-option" title="분홍색"><input class="sr-only" type="radio" name="color" value="rose" aria-label="분홍색"><span class="event-color-swatch rose" aria-hidden="true"></span></label>
+<label class="event-color-option" title="노란색"><input class="sr-only" type="radio" name="color" value="yellow" aria-label="노란색"><span class="event-color-swatch yellow" aria-hidden="true"></span></label>
+<label class="event-color-option" title="민트색"><input class="sr-only" type="radio" name="color" value="teal" aria-label="민트색"><span class="event-color-swatch teal" aria-hidden="true"></span></label>
+<label class="event-color-option" title="주황색"><input class="sr-only" type="radio" name="color" value="orange" aria-label="주황색"><span class="event-color-swatch orange" aria-hidden="true"></span></label>
+<label class="event-color-option" title="하늘색"><input class="sr-only" type="radio" name="color" value="cyan" aria-label="하늘색"><span class="event-color-swatch cyan" aria-hidden="true"></span></label>
+<label class="event-color-option" title="남색"><input class="sr-only" type="radio" name="color" value="indigo" aria-label="남색"><span class="event-color-swatch indigo" aria-hidden="true"></span></label>
+<label class="event-color-option" title="회색"><input class="sr-only" type="radio" name="color" value="slate" aria-label="회색"><span class="event-color-swatch slate" aria-hidden="true"></span></label>
+</div></fieldset><datalist id="category-suggestions"><option value="업무"></option><option value="개인"></option><option value="회의"></option><option value="약속"></option><option value="공부"></option><option value="기타"></option></datalist><div class="event-toggles"><label class="all-day-toggle"><input type="checkbox" name="all_day">하루 종일</label><label class="all-day-toggle todo-toggle"><input type="checkbox" name="is_todo">To Do</label><label class="all-day-toggle dday-toggle"><input type="checkbox" name="is_dday">D-Day</label><label class="all-day-toggle cancel-toggle"><input type="checkbox" name="is_cancelled">일정 취소</label><label class="all-day-toggle reminder-toggle"><input type="checkbox" name="reminder_enabled">알림 받기</label><select name="reminder_minutes" id="event-reminder-minutes" aria-label="알림 시점" class="event-reminder-select"><option value="10">10분 전</option><option value="30">30분 전</option><option value="60">1시간 전</option><option value="120">2시간 전</option><option value="180">3시간 전</option><option value="240">4시간 전</option><option value="300">5시간 전</option><option value="360">6시간 전</option><option value="420">7시간 전</option><option value="480">8시간 전</option><option value="540">9시간 전</option><option value="600">10시간 전</option><option value="660">11시간 전</option><option value="720">12시간 전</option><option value="780">13시간 전</option><option value="840">14시간 전</option><option value="900">15시간 전</option><option value="960">16시간 전</option><option value="1020">17시간 전</option><option value="1080">18시간 전</option><option value="1140">19시간 전</option><option value="1200">20시간 전</option><option value="1260">21시간 전</option><option value="1320">22시간 전</option><option value="1380">23시간 전</option><option value="1440">하루 전</option></select></div><div class="form-row event-date-row"><label><span id="event-start-label">시작 시간</span><input type="datetime-local" name="start" required></label><label><span id="event-end-label">종료 시간</span><input type="datetime-local" name="end" required></label></div><section id="event-repeat-options" class="event-repeat-options"><label>일정 반복<select name="repeat_frequency"><option value="none">반복 안 함</option><option value="weekly">매주 반복</option><option value="monthly">매달 반복</option><option value="yearly">매년 반복</option></select></label><div id="repeat-calendar-type-wrap" class="repeat-calendar-type-wrap" hidden><span class="repeat-type-label">반복 기준</span><div class="repeat-type-toggle" role="radiogroup" aria-label="반복 기준 선택"><label class="repeat-type-option"><input type="radio" name="repeat_calendar_type" value="solar" checked><span>양력</span></label><label class="repeat-type-option"><input type="radio" name="repeat_calendar_type" value="lunar"><span>음력</span></label></div></div><div id="repeat-duration" hidden><label class="repeat-weeks-label"><span id="repeat-duration-label">반복 기간</span><span class="repeat-weeks-input"><input type="number" name="repeat_weeks" min="1" max="52" step="1" value="4" inputmode="numeric" disabled><span id="repeat-duration-unit">주</span></span></label><p class="repeat-description" id="repeat-description">첫 일정을 포함한 주 수예요. (최대 52주)</p><p id="repeat-preview" class="repeat-preview" role="status" aria-live="polite"></p><p class="repeat-description">생성 후 각 일정을 개별 수정·삭제할 수 있어요.</p></div></section><label>일정 내용 (메모)<textarea name="notes" rows="3" maxlength="2000" placeholder="장소나 함께 알아둘 내용을 적어주세요."></textarea></label><p class="form-error" role="alert"></p><div class="dialog-actions"><div class="event-secondary-actions"><button type="button" id="delete-event" class="danger">일정 삭제</button><button type="button" id="copy-event" class="secondary">일정 복사</button></div><button class="primary" type="submit">일정 저장</button></div></form></dialog>
+<dialog id="monthly-item-dialog" aria-labelledby="monthly-item-heading">
+ <form id="monthly-item-form">
+  <div class="dialog-heading"><h2 id="monthly-item-heading">월간 항목 추가</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div>
+  <fieldset class="monthly-type"><legend class="sr-only">유형</legend><label><input type="radio" name="item_type" value="event" checked><span>일정</span></label><label><input type="radio" name="item_type" value="todo"><span>To Do</span></label></fieldset>
+  <label>제목<input name="title" maxlength="100" required placeholder="이달에 기억할 일을 적어주세요."></label>
+  <div class="form-row monthly-form-row"><label>해당 월<input type="month" name="month" min="0001-01" max="9999-12" required></label><label>캘린더<select name="calendar_id" required></select></label></div>
+  <label>메모<textarea name="notes" rows="4" maxlength="2000" placeholder="함께 알아둘 내용을 적어주세요."></textarea></label>
+  <p class="form-error" role="alert"></p>
+  <div class="dialog-actions"><button type="button" id="delete-monthly-item" class="danger" hidden>삭제</button><button type="button" id="edit-monthly-item" class="secondary" hidden>수정</button><button type="submit" id="save-monthly-item" class="primary">저장</button></div>
+ </form>
+</dialog>
+<dialog id="create-dialog"><form id="create-form"><div class="dialog-heading"><h2>우리의 새 캘린더</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div><label>캘린더 이름<input name="name" placeholder="예: 우리 가족, 사이드 프로젝트" maxlength="50" required></label><label>캘린더 접속 주소 (영문 영숫자, 선택)<input name="slug" placeholder="예: my-schedule, family (미입력시 자동 생성)" maxlength="50"></label><p class="muted">고유 주소 설정 시 <strong>dwm.brightnetworks.kr/{주소}</strong> 로 바로 열 수 있어요.</p><p class="form-error" role="alert"></p><button class="primary full" type="submit">캘린더 만들기</button></form></dialog>
+<dialog id="share-dialog"><div class="dialog-heading"><div><span class="eyebrow">BETTER TOGETHER</span><h2>링크 하나로, 함께</h2></div><button class="icon close" aria-label="닫기">✕</button></div><p class="muted">초대받은 사람은 구글 또는 카카오 로그인 후 참여해요.<br>초대 링크는 7일 동안 유효합니다.</p><label>캘린더 고유 주소<input id="calendar-url" readonly></label><button id="copy-calendar-url" type="button" class="secondary full">캘린더 주소 복사</button><label>초대할 사람의 권한<select id="invite-role"><option value="editor">일정 보기 및 편집</option><option value="viewer">일정 보기만</option></select></label><button id="make-invite" class="primary full">초대 링크 만들기</button><div id="invite-result" hidden><label>초대 링크<input id="invite-url" readonly></label><button id="copy-invite" class="secondary full">링크 복사</button></div><p class="form-error" role="alert"></p><button id="revoke-invites" class="text-button danger">기존 초대 링크 모두 만료시키기</button></dialog>
+<dialog id="schedule-share-dialog" aria-labelledby="schedule-share-title">
+ <div class="dialog-heading"><div><span class="eyebrow">READ-ONLY SHARE</span><h2 id="schedule-share-title">일정 공유 링크</h2></div><button type="button" class="icon close" aria-label="닫기">✕</button></div>
+ <div class="schedule-share-tabs" role="tablist">
+  <button type="button" class="schedule-tab-btn active" id="tab-create-share" role="tab" aria-selected="true">새 링크 만들기</button>
+  <button type="button" class="schedule-tab-btn" id="tab-manage-shares" role="tab" aria-selected="false">공유 목록 및 방문자 (<span id="share-count-badge">0</span>)</button>
+ </div>
+ <div id="panel-create-share" class="share-tab-panel">
+  <form id="create-schedule-share-form">
+   <label>공유할 기간
+    <div class="share-period-options">
+     <label class="period-chip-label"><input type="radio" name="share_period" value="day" checked><span>오늘 하루</span></label>
+     <label class="period-chip-label"><input type="radio" name="share_period" value="week"><span>일주일</span></label>
+     <label class="period-chip-label"><input type="radio" name="share_period" value="month"><span>이번 달</span></label>
+    </div>
+   </label>
+   <div class="form-row">
+    <label>대상 캘린더
+     <select id="share-calendar-select"><option value="all">내 모든 캘린더 일정</option></select>
+    </label>
+    <label>기준 날짜
+     <input type="date" id="share-target-date" required>
+    </label>
+   </div>
+   <label>링크 유효 기간 (만료 설정)
+    <select id="share-expires-select">
+     <option value="1d" selected>1일 동안 유효 (24시간)</option>
+     <option value="1h">1시간 동안 유효</option>
+     <option value="3d">3일 동안 유효</option>
+     <option value="7d">7일 동안 유효</option>
+     <option value="30d">30일 동안 유효</option>
+     <option value="never">만료 없음 (상시 공유)</option>
+     <option value="custom">직접 일시 선택…</option>
+    </select>
+   </label>
+   <div id="share-custom-expires-wrap" hidden>
+    <label>만료 일시 직접 지정<input type="datetime-local" id="share-custom-expires"></label>
+   </div>
+   <label>공유 제목 (선택)<input type="text" id="share-title-input" placeholder="예: 김철수의 오늘 하루 일정" maxlength="100"></label>
+   <p id="create-share-error" class="form-error" role="alert"></p>
+   <button type="submit" class="primary full" id="submit-create-share">읽기 전용 공유 링크 생성</button>
+  </form>
+  <div id="created-share-result" class="created-share-box" hidden>
+   <div class="share-result-title">🎉 공유 링크가 생성되었습니다!</div>
+   <p class="muted small">로그인 없이 누구나 이 링크로 일정을 확인할 수 있습니다.</p>
+   <div class="share-url-row"><input type="text" id="created-share-url" readonly><button type="button" class="primary" id="copy-created-share-btn">복사</button></div>
+   <div class="share-result-actions">
+    <a href="#" target="_blank" rel="noopener" id="open-created-share-btn" class="secondary">새 탭에서 열기 ↗</a>
+    <button type="button" class="text-button" id="view-all-shares-btn">공유 목록 및 방문자 확인</button>
+   </div>
+  </div>
+ </div>
+ <div id="panel-manage-shares" class="share-tab-panel" hidden>
+  <div id="share-list-status" class="small muted" style="margin-bottom:12px;">공유 링크를 불러오는 중…</div>
+  <div id="share-links-list" class="share-links-list"></div>
+ </div>
+</dialog>
+<dialog id="mobile-more-dialog" aria-labelledby="mobile-more-title">
+ <div class="dialog-heading"><h2 id="mobile-more-title">더보기</h2><button type="button" class="icon close" aria-label="메뉴 닫기">✕</button></div>
+ <p class="mobile-menu-account" id="mobile-menu-account"></p>
+ <section class="mobile-menu-section" aria-labelledby="mobile-menu-view-title"><h3 id="mobile-menu-view-title">캘린더 보기</h3>
+  <button type="button" class="mobile-menu-item" data-mobile-action="today"><span aria-hidden="true">◎</span>오늘로 이동</button>
+  
+  <button type="button" class="mobile-menu-item" data-mobile-action="sessions"><span aria-hidden="true">♧</span>함께 보는 세션</button>
+ </section>
+ <section class="mobile-menu-section" aria-labelledby="mobile-menu-calendars-title"><div class="settings-calendar-list"><h3 id="mobile-menu-calendars-title">내 캘린더</h3><div id="mobile-menu-calendars"></div></div>
+  <button type="button" class="mobile-menu-item" data-mobile-action="create"><span aria-hidden="true">＋</span>새 캘린더 만들기</button>
+  <button type="button" class="mobile-menu-item" data-mobile-action="manage"><span aria-hidden="true">⚙</span>캘린더 관리</button>
+  <button type="button" class="mobile-menu-item" data-mobile-action="integrations"><span aria-hidden="true">🔗</span>iCloud 캘린더 연동</button>
+  <button type="button" class="mobile-menu-item" data-mobile-action="google-import"><span aria-hidden="true">📥</span>구글 캘린더 불러오기</button>
+  <button type="button" class="mobile-menu-item" data-mobile-action="schedule-share"><span aria-hidden="true">🔗</span>일정 공유 링크 (읽기 전용)</button>
+  <button type="button" class="mobile-menu-item" data-mobile-action="share"><span aria-hidden="true">↗</span>초대·주소 공유</button>
+ </section>
+ <section class="mobile-menu-section"><div id="language-settings"></div><button type="button" class="mobile-menu-item" data-mobile-action="profile"><span aria-hidden="true">♙</span>마이페이지</button><button type="button" class="mobile-menu-item danger" data-mobile-action="logout"><span aria-hidden="true">↪</span>로그아웃</button></section>
+</dialog>
+<dialog id="mobile-sessions-dialog" aria-labelledby="mobile-sessions-title">
+ <div class="dialog-heading"><h2 id="mobile-sessions-title">함께 보는 세션</h2><button type="button" class="icon close" aria-label="접속 세션 닫기">✕</button></div>
+ <p id="mobile-sessions-calendar" class="muted small"></p>
+ <div class="section-title"><h3>현재 접속</h3><span id="mobile-session-count" class="count">0</span></div>
+ <p class="muted small">같은 계정도 기기나 창마다 별도 접속으로 표시돼요. 관리자가 세션을 종료하면 해당 기기는 로그아웃됩니다.</p>
+ <p id="mobile-session-status" class="small" role="status" aria-live="polite"></p>
+ <div id="mobile-presence-list"></div>
+</dialog>
+<dialog id="mobile-profile-dialog" aria-labelledby="mobile-profile-title">
+ <div class="dialog-heading"><button type="button" id="profile-back-settings" class="dialog-back" aria-label="설정으로 돌아가기" hidden>‹ <span>설정</span></button><h2 id="mobile-profile-title">마이페이지</h2><button type="button" class="icon close" aria-label="마이페이지 닫기">✕</button></div>
+ <div class="mobile-profile-summary"><span id="mobile-profile-avatar" class="avatar"></span><div><strong id="mobile-profile-name"></strong><p id="mobile-profile-login" class="small muted"></p></div></div>
+ <form id="profile-name-form" class="profile-name-form"><label for="profile-name-input">내 이름<input id="profile-name-input" name="name" maxlength="100" autocomplete="nickname" placeholder="사용할 이름을 입력해 주세요" required></label><p id="profile-name-error" class="form-error" role="alert"></p><button type="submit" class="secondary full">이름 저장</button></form>
+ <section class="mobile-menu-section profile-display-settings"><div class="section-title"><h3>화면 표시</h3></div><label class="profile-display-setting"><span><strong>음력 날짜 표시</strong><small id="profile-lunar-display-description">달력에서 양력 옆에 음력 날짜를 표시합니다.</small></span><input type="checkbox" role="switch" id="profile-lunar-display-toggle"></label><label class="profile-display-setting"><span><strong>예상 날씨 표시</strong><small id="profile-weather-display-description">날짜 옆에 예상 날씨 이모지와 비 올 확률을 표시합니다.</small></span><input type="checkbox" role="switch" id="profile-weather-display-toggle" checked></label><div class="profile-weather-location-row"><span class="small muted" id="profile-weather-location-summary">날씨 위치: 서울</span><button type="button" class="text-button" data-settings-section="preferences">위치 변경 →</button></div></section>
+ <section class="mobile-menu-section" id="profile-linked-section">
+  <div class="section-title"><h3>계정 연동</h3></div>
+  <p class="muted small">로그인에 사용할 다른 소셜 계정을 연동해 보세요.</p>
+  <div id="profile-linked-accounts"></div>
+ </section>
+ <section class="mobile-menu-section"><div class="section-title"><h3>내 캘린더</h3><span id="mobile-profile-calendar-count" class="count">0</span></div><div id="mobile-profile-calendars"></div></section>
+ <button type="button" class="secondary full" data-profile-action="create">새 캘린더 만들기</button>
+ <div class="login-legal-links modal-legal-links">
+  <a href="/privacy.html?v=20261014-todo-v2" target="_blank">개인정보 처리방침</a><span>·</span><a href="/terms.html?v=20261014-todo-v2" target="_blank">서비스 이용약관</a>
+ </div>
+ <button type="button" class="mobile-menu-item danger" data-profile-action="logout">로그아웃</button>
+</dialog>
+<dialog id="calendar-management-dialog" aria-labelledby="calendar-management-title">
+ <div class="dialog-heading"><h2 id="calendar-management-title">캘린더 관리</h2><button type="button" class="icon close" aria-label="캘린더 관리 닫기">✕</button></div>
+ <p class="muted small">캘린더를 선택해 이름, 색상, 참여자를 관리하고 외부 연동을 해제할 수 있어요.</p>
+ <section class="calendar-management-section"><h3>내 캘린더</h3><div id="calendar-management-list"></div></section>
+ <section class="calendar-management-section"><h3>연동된 캘린더</h3><div id="external-calendar-management-list"></div></section>
+ <p id="calendar-management-error" class="form-error" role="alert"></p>
+</dialog>
+<dialog id="calendar-details-dialog" aria-labelledby="calendar-details-title">
+ <div class="dialog-heading"><h2 id="calendar-details-title">캘린더 관리</h2><button type="button" class="icon close" aria-label="캘린더 관리 닫기">✕</button></div>
+ <p id="calendar-details-status" class="small" role="status"></p>
+ <form id="calendar-settings-form" hidden>
+  <label>캘린더 이름<input name="name" maxlength="50" required></label>
+  <fieldset class="calendar-color-picker"><legend>캘린더 색상</legend><div id="calendar-settings-colors" class="calendar-color-options"></div></fieldset>
+  <button type="submit" class="secondary full" id="save-calendar-settings">이름·색상 저장</button>
+ </form>
+ <section class="calendar-members-section" aria-labelledby="calendar-members-title"><div class="section-title"><h3 id="calendar-members-title">참여한 사람</h3><span id="calendar-member-count" class="count">0</span></div><div id="calendar-details-members"></div></section>
+ <section id="calendar-details-invites-section" class="calendar-members-section" hidden aria-labelledby="calendar-invites-title">
+  <div class="section-title"><h3 id="calendar-invites-title">초대 링크 관리</h3></div>
+  <p class="muted small">초대 링크를 만들어 멤버를 초대하세요. 각 초대 링크별로 가입한 사람을 확인할 수 있어요.</p>
+  <div class="calendar-invite-create-box">
+   <label for="details-invite-role">초대할 권한</label>
+   <div class="invite-create-controls">
+    <select id="details-invite-role">
+     <option value="editor">일정 보기 및 편집</option>
+     <option value="viewer">일정 보기만</option>
+    </select>
+    <button type="button" class="primary" id="details-make-invite-btn">＋ 초대 링크 만들기</button>
+   </div>
+   <div id="details-invite-result" class="invite-new-result" hidden>
+    <label for="details-invite-url">생성된 초대 링크</label>
+    <div class="invite-url-copy-group">
+     <input id="details-invite-url" readonly autocorrect="off" autocapitalize="off" spellcheck="false">
+     <button type="button" class="secondary" id="details-copy-invite-btn">링크 복사</button>
+    </div>
+    <p class="invite-created-notice muted small">초대 링크가 생성되었습니다. 7일 동안 유효합니다.</p>
+   </div>
+  </div>
+  <div class="calendar-invites-list-heading"><h4>초대 링크 목록 및 가입 현황</h4></div>
+  <div id="calendar-details-invites"></div>
+ </section>
+ <p id="calendar-details-error" class="form-error" role="alert"></p>
+ <button type="button" class="primary full" id="view-managed-calendar" disabled>이 캘린더 보기</button>
+ <div class="calendar-delete-section" id="calendar-delete-section" hidden>
+  <button type="button" class="danger full" id="delete-calendar-btn">캘린더 삭제</button>
+ </div>
+</dialog>
+<dialog id="google-import-dialog" aria-labelledby="google-import-title">
+ <div class="dialog-heading"><h2 id="google-import-title">Google 캘린더 가져오기</h2><button type="button" class="icon close" aria-label="Google 캘린더 가져오기 닫기">✕</button></div>
+ <p class="muted small">가져오기를 시작하면 별도의 새 캘린더를 만들고, 선택한 기간의 일정을 그곳에 복사합니다.</p>
+ <div id="google-import-authorization"></div>
+ <div class="google-import-controls">
+  <label for="google-import-calendar-name">새 캘린더 이름<input id="google-import-calendar-name" maxlength="50" value="Google 캘린더" required></label>
+  <label for="google-import-range" class="small">가져올 기간</label>
+  <select id="google-import-range">
+   <option value="all">전체 일정 (과거 모든 일정 포함)</option>
+   <option value="1y">지난 1년 ~ 향후 1년</option>
+   <option value="6">향후 6개월 (지난 1개월 포함)</option>
+   <option value="3" selected>향후 3개월 (지난 1개월 포함)</option>
+   <option value="1">향후 1개월 (지난 1개월 포함)</option>
+  </select>
+  <label class="google-import-consent small"><input type="checkbox" id="google-import-share"> 가져온 일정은 새 캘린더에 저장되고, 이후 초대한 참여자에게 공유되는 것을 이해했습니다.</label>
+  <p id="google-import-error" class="form-error" role="alert"></p>
+  <button type="button" id="btn-import-google" class="primary full">새 캘린더 만들고 가져오기</button>
+ </div>
+</dialog>
+<dialog id="calendar-integrations-dialog" aria-labelledby="calendar-integrations-title">
+ <div class="dialog-heading"><button type="button" id="integrations-back-settings" class="dialog-back" aria-label="설정으로 돌아가기" hidden>‹ <span>설정</span></button><h2 id="calendar-integrations-title">iCloud 캘린더 연동</h2><button type="button" class="icon close" aria-label="iCloud 캘린더 연동 닫기">✕</button></div>
+ <p class="muted small">외부 캘린더 서비스와 일정을 연동하여 한곳에서 확인하세요.</p>
+ <div class="integration-providers-tabs" role="tablist" aria-label="연동 서비스 선택">
+  <button type="button" class="integration-tab active" data-provider-tab="icloud" role="tab" aria-selected="true">Apple iCloud</button>
+  <button type="button" class="integration-tab" data-provider-tab="google" role="tab" aria-selected="false">Google</button>
+  <button type="button" class="integration-tab disabled" data-provider-tab="outlook" role="tab" aria-disabled="true" title="준비 중">Outlook (준비 중)</button>
+ </div>
+ <section id="icloud-integration-panel" class="integration-panel" role="tabpanel">
+  <form id="icloud-connect-form">
+   <div class="integration-notice-box">
+    <strong>Apple 앱 암호(App-Specific Password)로 안전하게 연결</strong>
+    <p class="small">Apple 계정에서 발급한 앱 암호로 iCloud 캘린더를 연결하세요.<br>
+    Apple 계정(<a href="https://account.apple.com/" target="_blank" rel="noopener noreferrer">account.apple.com</a>)의 <strong>'로그인 및 보안' &gt; '앱 암호'</strong>에서 생성한 암호를 입력해 주세요.</p>
+   </div>
+   <label for="icloud-email-input">Apple 계정 이메일
+    <input type="email" id="icloud-email-input" name="email" placeholder="example@icloud.com" required autocomplete="email">
+   </label>
+   <label for="icloud-password-input">Apple 앱 암호
+    <span class="settings-password-field"><input type="password" id="icloud-password-input" name="password" placeholder="xxxx-xxxx-xxxx-xxxx" required autocomplete="off" spellcheck="false" autocapitalize="none"><button type="button" id="icloud-password-toggle" aria-label="앱 암호 표시" aria-pressed="false">표시</button></span><small class="settings-field-hint">Apple 계정에서 발급한 앱 암호를 입력하세요.</small>
+   </label>
+   <p id="icloud-connect-error" class="form-error" role="alert"></p>
+   <button type="submit" id="btn-connect-icloud" class="primary full">iCloud 캘린더 연결</button>
+  </form>
+  <div id="icloud-connected-view" hidden>
+   <div class="integration-status-card">
+    <div class="integration-card-header">
+     <div class="integration-card-title">
+      <span class="apple-badge-icon" aria-hidden="true"></span>
+      <div>
+       <strong id="icloud-connected-email"></strong>
+       <span id="icloud-connection-status-badge" class="status-badge connected">연결됨</span>
+      </div>
+     </div>
+     <div class="integration-card-actions">
+      <button type="button" id="btn-sync-icloud-now" class="secondary small-action-btn">지금 동기화</button>
+      <button type="button" id="btn-open-disconnect-icloud" class="text-button danger small-action-btn">연결 해제</button>
+     </div>
+    </div>
+    <div class="integration-card-meta">
+     <span id="icloud-last-sync-time" class="muted small"></span>
+    </div>
+    <p id="icloud-sync-status-msg" class="form-error small" role="alert"></p>
+   </div>
+   <div class="section-title">
+    <h3>iCloud 캘린더 목록</h3>
+    <span id="icloud-calendar-count" class="count">0</span>
+   </div>
+   <p class="muted small">동기화할 캘린더를 켜고 동기화 방향을 선택하세요. 기본값은 읽기 전용입니다.</p>
+   <div id="icloud-calendars-list" class="icloud-calendars-list"></div>
+  </div>
+ </section>
+ <section id="google-integration-panel" class="integration-panel" role="tabpanel" hidden>
+  <div class="integration-status-card">
+   <div class="integration-card-header">
+    <div class="integration-card-title">
+     <b class="google-badge" aria-hidden="true">G</b>
+     <div>
+      <strong>Google 캘린더</strong>
+      <span id="google-tab-status-badge" class="status-badge"></span>
+     </div>
+    </div>
+   </div>
+   <p class="muted small">Google 캘린더 일정을 새 캘린더로 불러와 관리할 수 있습니다.</p>
+   <div id="google-tab-actions" class="google-tab-actions">
+    <button type="button" id="btn-open-google-import" class="primary full">Google 캘린더 불러오기</button>
+   </div>
+  </div>
+ </section>
+</dialog>
+<dialog id="icloud-disconnect-dialog" aria-labelledby="icloud-disconnect-title">
+ <div class="dialog-heading"><h2 id="icloud-disconnect-title">iCloud 캘린더 연결 해제</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div>
+ <p class="muted small">iCloud 연결을 해제할 때 가져온 캘린더와 일정을 어떻게 처리할지 선택해 주세요.</p>
+ <div class="dialog-actions-vertical">
+  <button type="button" id="btn-disconnect-keep" class="secondary full">가져온 일정 유지하고 연결만 해제</button>
+  <button type="button" id="btn-disconnect-delete" class="danger full">가져온 캘린더 및 일정 모두 삭제</button>
+  <button type="button" class="text-button full close">취소</button>
+ </div>
+</dialog>
+<dialog id="weather-hourly-dialog" closedby="any" aria-labelledby="weather-hourly-title">
+ <div class="dialog-heading">
+  <div>
+   <span class="eyebrow" id="weather-hourly-location">서울</span>
+   <h2 id="weather-hourly-title">시간대별 예상 날씨</h2>
+  </div>
+  <button type="button" class="icon close" aria-label="닫기">✕</button>
+ </div>
+ <div class="weather-daily-summary-card" id="weather-daily-summary"></div>
+ <div class="weather-hourly-header">
+  <span>시간</span>
+  <span>날씨</span>
+  <span>강수확률</span>
+  <span>기온</span>
+ </div>
+ <div class="weather-hourly-list" id="weather-hourly-list" role="region" aria-label="시간대별 날씨 목록"></div>
+</dialog>
+</body></html>

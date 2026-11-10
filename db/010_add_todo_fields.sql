@@ -1,0 +1,6 @@
+BEGIN;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS is_todo boolean NOT NULL DEFAULT false;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS completed boolean NOT NULL DEFAULT false;
+
+INSERT INTO schema_migrations(version) VALUES(10) ON CONFLICT DO NOTHING;
+COMMIT;

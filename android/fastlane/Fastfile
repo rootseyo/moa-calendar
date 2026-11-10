@@ -1,0 +1,96 @@
+default_platform(:android)
+
+platform :android do
+  before_all do
+    # 필요시 추가 환경 점검
+  end
+
+  desc "단위 테스트(Unit Tests) 실행"
+  lane :test do
+    gradle(
+      task: "test",
+      project_dir: "."
+    )
+  end
+
+  desc "정적 분석(Lint) 실행"
+  lane :lint do
+    gradle(
+      task: "lint",
+      project_dir: "."
+    )
+  end
+
+  desc "개발용 디버그 APK 빌드"
+  lane :build_debug do
+    gradle(
+      task: "assembleDebug",
+      project_dir: "."
+    )
+    UI.success("디버그 APK 빌드 완료: app/build/outputs/apk/debug/app-debug.apk")
+  end
+
+  desc "릴리즈 AAB(Android App Bundle) 및 APK 빌드"
+  lane :build do
+    test
+    gradle(
+      task: "bundleRelease",
+      project_dir: "."
+    )
+    gradle(
+      task: "assembleRelease",
+      project_dir: "."
+    )
+    UI.success("릴리즈 AAB 및 APK 빌드 완료!")
+  end
+
+  desc "Google Play Console 내부 테스트(Internal Test) 트랙에 배포"
+  lane :beta do
+    build
+    upload_to_play_store(
+      track: "internal",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+    UI.success("Google Play 내부 테스트 배포 완료!")
+  end
+
+  desc "Google Play Console 프로덕션(Production) 정식 배포"
+  lane :release do
+    build
+    upload_to_play_store(
+      track: "production",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      release_status: "completed",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+    UI.success("Google Play 프로덕션 배포 완료!")
+  end
+
+  desc "검증된 릴리스 번들을 운영 트랙에 업로드"
+  lane :production do
+    upload_to_play_store(
+      track: "production",
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      release_status: "completed",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  after_all do |lane|
+    UI.message("Lane [#{lane}] 성공적으로 완료되었습니다.")
+  end
+
+  error do |lane, exception|
+    UI.error("Lane [#{lane}] 실행 중 오류 발생: #{exception.message}")
+  end
+end
