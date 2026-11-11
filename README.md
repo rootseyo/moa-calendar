@@ -221,6 +221,14 @@ node --check public/app.js
 
 ---
 
+## 💼 구축 및 도입 문의 (Enterprise & Customization)
+
+조직/기업 내 **독자적인 실시간 사내 캘린더 시스템 구축**, 사내 그룹웨어/SSO 연동, 온프레미스(On-Premise) 또는 전용 클라우드 인프라 배포, 커스텀 브랜딩 및 맞춤 기능 개발 의뢰가 필요하신 경우 편하게 문의해 주세요.
+
+* 📧 **도입/구축 문의**: [sales@brightnetworks.kr](mailto:sales@brightnetworks.kr)
+
+---
+
 ## 📄 라이선스 (License)
 
 이 프로젝트는 [MIT 라이선스](LICENSE)에 따라 자유롭게 사용, 수정, 배포할 수 있습니다.
