@@ -33,6 +33,48 @@ export function repeatEventRanges(start, end, { frequency = 'weekly', calendarTy
   if(count<1||count>52)throw new RangeError('반복 기간은 1~52주로 선택해 주세요.');
   return weeklyEventRanges(start,end,count);
  }
+ if(frequency==='biweekly'){
+  if(count<1||count>52)throw new RangeError('반복 횟수는 1~52회로 선택해 주세요.');
+  return Array.from({length:count},(_,i)=>({start:shiftLocalDateTime(start,i*14),end:shiftLocalDateTime(end,i*14)}));
+ }
+ if(frequency==='weekdays'){
+  if(count<1||count>60)throw new RangeError('평일 반복은 1~60회로 선택해 주세요.');
+  const startEpoch = parseLocalDateTime(start).getTime();
+  const endEpoch = parseLocalDateTime(end).getTime();
+  const durationMinutes = Math.round((endEpoch - startEpoch) / 60000);
+  const ranges = [];
+  let cursor = start;
+  let guard = 0;
+  while(ranges.length < count && guard < 120){
+   const d = parseLocalDateTime(cursor);
+   const dow = d.getUTCDay();
+   if(dow >= 1 && dow <= 5){
+    ranges.push({ start: cursor, end: shiftLocalDateTime(cursor, 0, durationMinutes) });
+   }
+   cursor = shiftLocalDateTime(cursor, 1);
+   guard++;
+  }
+  return ranges;
+ }
+ if(frequency==='monthly_last'){
+  if(count<1||count>36)throw new RangeError('반복 기간은 1~36개월로 선택해 주세요.');
+  const [startDateStr, startTimeStr] = start.split('T');
+  const [baseY, baseM] = startDateStr.split('-').map(Number);
+  const startEpoch = parseLocalDateTime(start).getTime();
+  const endEpoch = parseLocalDateTime(end).getTime();
+  const durationMinutes = Math.round((endEpoch - startEpoch) / 60000);
+  const ranges = [];
+  for(let i = 0; i < count; i++){
+   const totalM = (baseM - 1) + i;
+   const targetY = baseY + Math.floor(totalM / 12);
+   const targetM = (totalM % 12) + 1;
+   const lastD = new Date(Date.UTC(targetY, targetM, 0)).getUTCDate();
+   const dateStr = `${targetY}-${String(targetM).padStart(2,'0')}-${String(lastD).padStart(2,'0')}`;
+   const newStart = `${dateStr}T${startTimeStr}`;
+   ranges.push({ start: newStart, end: shiftLocalDateTime(newStart, 0, durationMinutes) });
+  }
+  return ranges;
+ }
  if(frequency==='monthly'){
   if(count<1||count>36)throw new RangeError('반복 기간은 1~36개월로 선택해 주세요.');
  }else if(frequency==='yearly'){

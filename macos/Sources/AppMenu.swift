@@ -15,6 +15,10 @@ public final class AppMenu {
         appMenu.addItem(NSMenuItem.separator())
         let prefItem = NSMenuItem(title: "서버 설정...", action: #selector(delegate.showPreferences), keyEquivalent: ",")
         appMenu.addItem(prefItem)
+        let notifItem = NSMenuItem(title: "알림 설정...", action: #selector(delegate.showNotificationSettings), keyEquivalent: "")
+        appMenu.addItem(notifItem)
+        let testNotifItem = NSMenuItem(title: "테스트 알림 발송", action: #selector(delegate.sendTestNotification), keyEquivalent: "")
+        appMenu.addItem(testNotifItem)
         appMenu.addItem(NSMenuItem.separator())
 
         let servicesItem = NSMenuItem(title: "서비스", action: nil, keyEquivalent: "")

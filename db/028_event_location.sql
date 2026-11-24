@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS location text NOT NULL DEFAULT '' CHECK(length(location) <= 200);
+INSERT INTO schema_migrations(version) VALUES(28) ON CONFLICT DO NOTHING;
+COMMIT;

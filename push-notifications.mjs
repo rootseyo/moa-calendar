@@ -214,6 +214,7 @@ export async function notifyCalendarActivity({ all, run }, { calendarId, calenda
   if (action === 'create') actionText = '새 일정을 등록했습니다:';
   else if (action === 'update') actionText = '일정을 수정했습니다:';
   else if (action === 'delete') actionText = '일정을 삭제했습니다:';
+  else if (action === 'comment') actionText = '일정에 댓글을 남겼습니다:';
 
   const body = `${actorName || '멤버'}님이 ${actionText} "${eventTitle}"`;
   const title = calendarName ? `[${calendarName}]` : '모아 캘린더';
@@ -226,6 +227,145 @@ export async function notifyCalendarActivity({ all, run }, { calendarId, calenda
   });
 }
 
+export function getKstDateAndTime(referenceTime = Date.now()) {
+  const kst = new Date(referenceTime + 9 * 3600 * 1000);
+  const dateStr = kst.toISOString().slice(0, 10);
+  const timeStr = kst.toISOString().slice(11, 16);
+  const minutesOfDay = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  return { dateStr, timeStr, minutesOfDay };
+}
+
+export function buildDailyBriefingMessage({ todayEvents = [], weatherToday = null, nearestDday = null, locationName = '서울' } = {}) {
+  const parts = [];
+  if (todayEvents.length === 0) {
+    parts.push('오늘은 등록된 일정이 없어요');
+  } else {
+    const first = todayEvents[0];
+    const firstTime = first.all_day ? '종일' : String(first.start || '').slice(11, 16);
+    const firstLabel = firstTime ? `${firstTime} ${first.title}` : first.title;
+    parts.push(
+      todayEvents.length === 1
+        ? `오늘 일정 1건 (${firstLabel})`
+        : `오늘 일정 ${todayEvents.length}건 (첫 일정 ${firstLabel})`
+    );
+  }
+
+  if (weatherToday) {
+    const emoji = weatherToday.emoji || '🌤️';
+    const rainPart = Number(weatherToday.rainProbability) >= 30 ? ` 비 ${Math.round(weatherToday.rainProbability)}%` : '';
+    const tempPart = Number.isFinite(weatherToday.tempMin) && Number.isFinite(weatherToday.tempMax)
+      ? ` ${Math.round(weatherToday.tempMin)}°~${Math.round(weatherToday.tempMax)}°`
+      : '';
+    parts.push(`${emoji} ${locationName}${rainPart}${tempPart}`);
+  }
+
+  if (nearestDday && nearestDday.title && typeof nearestDday.diffDays === 'number') {
+    const dLabel = nearestDday.diffDays === 0 ? 'D-Day' : `D-${nearestDday.diffDays}`;
+    parts.push(`🚩 ${nearestDday.title} ${dLabel}`);
+  }
+
+  return {
+    title: '☀️ 오늘의 모아 브리핑',
+    body: parts.join(' · '),
+    tag: 'moa-daily-briefing',
+    url: '/',
+  };
+}
+
+export async function checkAndDispatchDailyBriefings({ all, run, fetchWeather }, referenceTime = Date.now()) {
+  const { dateStr: todayKst, minutesOfDay } = getKstDateAndTime(referenceTime);
+  let prefs = [];
+  try {
+    prefs = await all(
+      `SELECT user_id, briefing_time, location_name, latitude, longitude, last_sent_date
+       FROM daily_briefing_preferences
+       WHERE enabled = true AND (last_sent_date IS NULL OR last_sent_date < $1)
+       LIMIT 100`,
+      todayKst
+    );
+  } catch {
+    return { dispatched: 0 };
+  }
+  if (!prefs || prefs.length === 0) return { dispatched: 0 };
+
+  let dispatched = 0;
+  for (const pref of prefs) {
+    const [hh, mm] = String(pref.briefing_time || '08:00').split(':').map(Number);
+    const targetMinutes = hh * 60 + mm;
+    const diff = minutesOfDay - targetMinutes;
+    if (diff < 0 || diff > 15) continue;
+
+    // Atomically claim today's briefing delivery so concurrent workers / restarts never double-send
+    const claim = await run(
+      `UPDATE daily_briefing_preferences
+       SET last_sent_date = $1, updated_at = now()
+       WHERE user_id = $2 AND enabled = true AND (last_sent_date IS NULL OR last_sent_date < $1)`,
+      todayKst, pref.user_id
+    );
+    if (!claim || !claim.rowCount) continue;
+
+    try {
+      const todayEvents = await all(
+        `SELECT e.title, e.start, e.all_day
+         FROM events e
+         JOIN members m ON m.calendar_id = e.calendar_id
+         JOIN calendars c ON c.id = e.calendar_id
+         WHERE m.user_id = $1 AND c.status = 'ACTIVE'
+           AND (e.is_cancelled IS NOT TRUE)
+           AND e.start <= $2 AND e."end" >= $3
+         ORDER BY e.all_day DESC, e.start ASC
+         LIMIT 20`,
+        pref.user_id, `${todayKst}T23:59:59`, `${todayKst}T00:00:00`
+      );
+
+      const ddayRows = await all(
+        `SELECT e.title, e.start
+         FROM events e
+         JOIN members m ON m.calendar_id = e.calendar_id
+         JOIN calendars c ON c.id = e.calendar_id
+         WHERE m.user_id = $1 AND c.status = 'ACTIVE'
+           AND (e.is_cancelled IS NOT TRUE)
+           AND e.is_dday = true
+           AND substr(e.start, 1, 10) >= $2
+         ORDER BY e.start ASC
+         LIMIT 1`,
+        pref.user_id, todayKst
+      );
+      let nearestDday = null;
+      if (ddayRows && ddayRows[0]) {
+        const dDate = String(ddayRows[0].start).slice(0, 10);
+        const diffDays = Math.round((Date.parse(`${dDate}T00:00:00Z`) - Date.parse(`${todayKst}T00:00:00Z`)) / 86400000);
+        if (diffDays >= 0 && diffDays <= 365) {
+          nearestDday = { title: ddayRows[0].title, diffDays };
+        }
+      }
+
+      let weatherToday = null;
+      if (typeof fetchWeather === 'function') {
+        try {
+          weatherToday = await fetchWeather({
+            latitude: pref.latitude,
+            longitude: pref.longitude,
+            date: todayKst,
+          });
+        } catch {}
+      }
+
+      const payload = buildDailyBriefingMessage({
+        todayEvents,
+        weatherToday,
+        nearestDday,
+        locationName: pref.location_name || '서울',
+      });
+      const result = await sendPushToUser({ all, run }, pref.user_id, payload);
+      if (result.sentCount > 0) dispatched++;
+    } catch (err) {
+      console.warn(`[Daily Briefing] Error dispatching for ${pref.user_id}:`, err.message);
+    }
+  }
+  return { dispatched };
+}
+
 export function startReminderWorker(dbHelpers, intervalMs = 30000) {
   let isRunning = false;
 
@@ -234,6 +374,7 @@ export function startReminderWorker(dbHelpers, intervalMs = 30000) {
     isRunning = true;
     try {
       await checkAndDispatchReminders(dbHelpers);
+      await checkAndDispatchDailyBriefings(dbHelpers);
     } catch (e) {
       console.warn('[Push Worker] Reminder check error:', e.message);
     } finally {

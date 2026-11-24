@@ -4,19 +4,32 @@ import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { servePublicPage } from './public-pages.mjs';
 import { GOOGLE_CALENDAR_LIST_SCOPE, GOOGLE_CALENDAR_SCOPE, hasCalendarScope, encryptToken, decryptToken, encryptSecret, decryptSecret, safeReturnPath } from './google-tokens.mjs';
 import { EVENT_COLORS, isValidLocalDateTime, weeklyEventRanges, repeatEventRanges } from './public/event-utils.js';
-import { WEATHER_PRESET_LOCATIONS, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl } from './public/weather.js';
+import { WEATHER_PRESET_LOCATIONS, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl, getWeatherInfo } from './public/weather.js';
 import { discoverICloudCalendars, hexToClosestDwmColor } from './caldav.mjs';
 import { createSyncEngine } from './caldav-sync.mjs';
 import { createCalendarMigration } from './calendar-migration.mjs';
 import {createCalendarMoveQueue} from './calendar-moves.mjs';
 import {hashPassword,verifyPassword,normalizeEmail,validEmail} from './local-auth.mjs';
 import { parseEnvironment, getWeekRange, getMonthRange, renderSharedScheduleHtml } from './schedule-shares.mjs';
+import { ALLOWED_REACTION_EMOJIS, renderPollPageHtml, recordCalendarActivity } from './schedule-polls.mjs';
+import {
+  requestPasswordReset,
+  completePasswordReset,
+  deleteUserAccount,
+  getCalendarIcalFeed,
+  rotateCalendarIcalFeed,
+  revokeCalendarIcalFeed,
+  loadCalendarEventsByFeedToken
+} from './account-and-feeds.mjs';
+import { formatIcsCalendar } from './ical.mjs';
 import {
   getVapidPublicKey,
   savePushSubscription,
   deletePushSubscription,
   sendPushToUser,
   notifyCalendarActivity,
+  buildDailyBriefingMessage,
+  getKstDateAndTime,
   startReminderWorker
 } from './push-notifications.mjs';
 const port = Number(process.env.PORT || 3000);
@@ -99,6 +112,97 @@ async function getValidGoogleAccessToken(userId) {
 const calendarMigration=createCalendarMigration({query,transaction,getGoogleToken:getValidGoogleAccessToken,broadcast});
 const weatherForecastCache=new Map();
 const weatherLocationCache=new Map();
+const FUNNEL_EVENTS=new Set([
+ 'sandbox_start',
+ 'signup_complete',
+ 'first_event_created',
+ 'invite_created',
+ 'invite_accepted',
+ 'share_link_created',
+ 'share_cta_clicked',
+ 'template_calendar_created',
+ 'share_import_completed'
+]);
+function resolveFeedbackEndpoint(){
+ const explicit=String(process.env.FEEDBACK_ENDPOINT||'').trim();
+ if(explicit)return explicit;
+ const analytics=String(process.env.ANALYTICS_ENDPOINT||'').trim();
+ if(analytics){
+  try{return `${new URL(analytics).origin}/api/feedback`;}catch{}
+ }
+ return 'https://admin.brightnetworks.kr/api/feedback';
+}
+function resolveAnalyticsEndpoint(){
+ let ep=String(process.env.ANALYTICS_ENDPOINT||'').trim();
+ if(!ep)return '';
+ if(!ep.includes('analytics/collect'))ep=`${ep.replace(/\/$/,'')}/api/analytics/collect`;
+ return ep;
+}
+async function ensureDefaultCalendar(client,userId,name='내 캘린더'){
+ const existing=(await client.query('SELECT 1 FROM members WHERE user_id=$1 LIMIT 1',[userId])).rows[0];
+ if(existing)return null;
+ const id=randomUUID(),slug=randomBytes(4).toString('hex');
+ await client.query('INSERT INTO calendars(id,name,owner,slug) VALUES($1,$2,$3,$4)',[id,name,userId,slug]);
+ await client.query('INSERT INTO members(calendar_id,user_id,role) VALUES($1,$2,$3)',[id,userId,'owner']);
+ return {id,slug,name};
+}
+async function loadShareWithEvents(shareToken){
+ const share=await one(`
+  SELECT s.*, u.name as owner_name, c.name as calendar_name
+  FROM schedule_shares s
+  JOIN users u ON u.id = s.user_id
+  LEFT JOIN calendars c ON c.id = s.calendar_id
+  WHERE s.token = $1
+ `,shareToken);
+ if(!share)return {share:null,isExpired:false,isRevoked:false,events:[]};
+ const isExpired=Boolean(share.expires_at&&new Date(share.expires_at)<new Date());
+ const isRevoked=Boolean(share.is_revoked);
+ if(isExpired||isRevoked)return {share,isExpired,isRevoked,events:[]};
+ const targetDateStr=share.target_date instanceof Date
+  ?share.target_date.toISOString().slice(0,10)
+  :String(share.target_date).slice(0,10);
+ let rangeStart,rangeEnd;
+ if(share.period==='day'){
+  rangeStart=`${targetDateStr}T00:00:00`;
+  rangeEnd=`${targetDateStr}T23:59:59`;
+ }else if(share.period==='week'){
+  const {monStr,sunStr}=getWeekRange(targetDateStr);
+  rangeStart=`${monStr}T00:00:00`;
+  rangeEnd=`${sunStr}T23:59:59`;
+ }else{
+  const {firstDay,lastDay}=getMonthRange(targetDateStr);
+  rangeStart=`${firstDay}T00:00:00`;
+  rangeEnd=`${lastDay}T23:59:59`;
+ }
+ let events=[];
+ if(share.calendar_id){
+  events=await all(`
+   SELECT e.*
+   FROM events e
+   JOIN calendars c ON c.id=e.calendar_id
+   WHERE e.calendar_id = $1
+     AND e.start <= $2
+     AND e.end >= $3
+     AND (e.is_cancelled IS NOT TRUE)
+     AND c.status = 'ACTIVE'
+   ORDER BY e.start, e.title
+  `,share.calendar_id,rangeEnd,rangeStart);
+ }else{
+  events=await all(`
+   SELECT e.*
+   FROM events e
+   JOIN members m ON m.calendar_id = e.calendar_id
+   JOIN calendars c ON c.id = e.calendar_id
+   WHERE m.user_id = $1
+     AND e.start <= $2
+     AND e.end >= $3
+     AND (e.is_cancelled IS NOT TRUE)
+     AND c.status = 'ACTIVE'
+   ORDER BY e.start, e.title
+  `,share.user_id,rangeEnd,rangeStart);
+ }
+ return {share,isExpired:false,isRevoked:false,events};
+}
 async function body(req) { let s=''; for await(const c of req) {s+=c;if(s.length>16000)fail(413,'요청이 너무 큽니다.');} try{return JSON.parse(s||'{}');}catch{fail(400,'잘못된 요청입니다.');} }
 const validText = (v,max=100) => typeof v==='string' && v.trim().length>0 && v.length<=max;
 async function handleRequest(req,res){
@@ -175,16 +279,51 @@ async function handleRequest(req,res){
    return json({results:localMatches});
   }
  }
+ const icalFeedRoute = p.match(/^\/ical\/([a-zA-Z0-9_-]+)\.ics$/);
+ if (icalFeedRoute && ['GET', 'HEAD'].includes(req.method)) {
+  const feedData = await loadCalendarEventsByFeedToken({ one, all, token: icalFeedRoute[1] });
+  if (!feedData) {
+   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+   return res.end(req.method === 'HEAD' ? undefined : '구독 캘린더를 찾을 수 없습니다.');
+  }
+  const icsBody = formatIcsCalendar({ name: feedData.calendarName || '모아 캘린더', events: feedData.events });
+  res.writeHead(200, {
+   'Content-Type': 'text/calendar; charset=utf-8',
+   'Cache-Control': 'private, max-age=300',
+   'X-Robots-Tag': 'noindex, nofollow'
+  });
+  return res.end(req.method === 'HEAD' ? undefined : icsBody);
+ }
+ const shareIcsRoute = p.match(/^\/(?:s|share)\/([a-zA-Z0-9_-]+)\/calendar\.ics$/);
+ if (shareIcsRoute && ['GET', 'HEAD'].includes(req.method)) {
+  const shareToken = shareIcsRoute[1];
+  const { share, isExpired, isRevoked, events } = await loadShareWithEvents(shareToken);
+  if (!share) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end(req.method === 'HEAD' ? undefined : '공유 일정을 찾을 수 없습니다.');
+  }
+  if (isExpired || isRevoked) {
+    res.writeHead(410, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end(req.method === 'HEAD' ? undefined : '공유 기간이 만료되었거나 중단된 일정입니다.');
+  }
+  const singleEventId = url.searchParams.get('event')?.trim();
+  const targetEvents = singleEventId ? events.filter(ev => ev.id === singleEventId) : events;
+  if (singleEventId && targetEvents.length === 0) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end(req.method === 'HEAD' ? undefined : '일정을 찾을 수 없습니다.');
+  }
+  const icsBody = formatIcsCalendar({ name: share.title || '모아 캘린더', events: targetEvents });
+  res.writeHead(200, {
+    'Content-Type': 'text/calendar; charset=utf-8',
+    'Content-Disposition': 'attachment; filename="moa-schedule.ics"',
+    'X-Robots-Tag': 'noindex, nofollow'
+  });
+  return res.end(req.method === 'HEAD' ? undefined : icsBody);
+ }
  const shareViewRoute = p.match(/^\/(?:s|share)\/([a-zA-Z0-9_-]+)$/);
  if (shareViewRoute && ['GET', 'HEAD'].includes(req.method)) {
   const shareToken = shareViewRoute[1];
-  const share = await one(`
-    SELECT s.*, u.name as owner_name, c.name as calendar_name
-    FROM schedule_shares s
-    JOIN users u ON u.id = s.user_id
-    LEFT JOIN calendars c ON c.id = s.calendar_id
-    WHERE s.token = $1
-  `, shareToken);
+  const { share, isExpired, isRevoked, events } = await loadShareWithEvents(shareToken);
 
   if (!share) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -195,9 +334,6 @@ async function handleRequest(req,res){
       origin
     }));
   }
-
-  const isExpired = Boolean(share.expires_at && new Date(share.expires_at) < new Date());
-  const isRevoked = Boolean(share.is_revoked);
 
   const cookieHeader = req.headers.cookie || '';
   const cookieMatch = cookieHeader.match(/moa_svid=([0-9a-fA-F-]{36})/);
@@ -258,59 +394,195 @@ async function handleRequest(req,res){
     return res.end(req.method === 'HEAD' ? undefined : renderSharedScheduleHtml({ share, isExpired, isRevoked, origin }));
   }
 
-  const targetDateStr = share.target_date instanceof Date
-    ? share.target_date.toISOString().slice(0, 10)
-    : String(share.target_date).slice(0, 10);
-
-  let rangeStart, rangeEnd;
-  if (share.period === 'day') {
-    rangeStart = `${targetDateStr}T00:00:00`;
-    rangeEnd = `${targetDateStr}T23:59:59`;
-  } else if (share.period === 'week') {
-    const { monStr, sunStr } = getWeekRange(targetDateStr);
-    rangeStart = `${monStr}T00:00:00`;
-    rangeEnd = `${sunStr}T23:59:59`;
-  } else {
-    const { firstDay, lastDay } = getMonthRange(targetDateStr);
-    rangeStart = `${firstDay}T00:00:00`;
-    rangeEnd = `${lastDay}T23:59:59`;
-  }
-
-  let events = [];
-  if (share.calendar_id) {
-    events = await all(`
-      SELECT e.*
-      FROM events e
-      JOIN calendars c ON c.id=e.calendar_id
-      WHERE e.calendar_id = $1
-        AND e.start <= $2
-        AND e.end >= $3
-        AND (e.is_cancelled IS NOT TRUE)
-        AND c.status = 'ACTIVE'
-      ORDER BY e.start, e.title
-    `, share.calendar_id, rangeEnd, rangeStart);
-  } else {
-    events = await all(`
-      SELECT e.*
-      FROM events e
-      JOIN members m ON m.calendar_id = e.calendar_id
-      JOIN calendars c ON c.id = e.calendar_id
-      WHERE m.user_id = $1
-        AND e.start <= $2
-        AND e.end >= $3
-        AND (e.is_cancelled IS NOT TRUE)
-        AND c.status = 'ACTIVE'
-      ORDER BY e.start, e.title
-    `, share.user_id, rangeEnd, rangeStart);
-  }
-
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   return res.end(req.method === 'HEAD' ? undefined : renderSharedScheduleHtml({ share, events, origin }));
  }
+ const pollVoteRoute = p.match(/^\/poll\/([a-zA-Z0-9_-]+)\/vote$/);
+ if (pollVoteRoute && req.method === 'POST') {
+  const pollToken = pollVoteRoute[1];
+  const poll = await one('SELECT * FROM schedule_polls WHERE token=$1', pollToken);
+  if (!poll) fail(404, '투표를 찾을 수 없습니다.');
+  const isExpired = Boolean(poll.expires_at && new Date(poll.expires_at) < new Date());
+  if (isExpired || poll.status !== 'OPEN') fail(410, '이미 마감된 투표입니다.');
+  const options = await all('SELECT id FROM schedule_poll_options WHERE poll_id=$1', poll.id);
+  const validOptionIds = new Set(options.map(o => o.id));
+  let rawBody = '';
+  for await (const chunk of req) { rawBody += chunk; if (rawBody.length > 16000) fail(413, '요청이 너무 큽니다.'); }
+  const isJson = String(req.headers['content-type'] || '').includes('application/json');
+  let voterName = '', voteEntries = [];
+  if (isJson) {
+   let parsed = {};
+   try { parsed = JSON.parse(rawBody || '{}'); } catch { fail(400, '잘못된 요청입니다.'); }
+   voterName = typeof parsed.voter_name === 'string' ? parsed.voter_name.trim() : '';
+   if (Array.isArray(parsed.votes)) {
+    voteEntries = parsed.votes.map(v => ({ option_id: String(v.option_id || ''), availability: String(v.availability || '') }));
+   }
+  } else {
+   const params = new URLSearchParams(rawBody);
+   voterName = (params.get('voter_name') || '').trim();
+   for (const [k, v] of params.entries()) {
+    if (k.startsWith('opt_')) voteEntries.push({ option_id: k.slice(4), availability: v });
+   }
+  }
+  if (!validText(voterName, 40) || /[\x00-\x1f\x7f]/.test(voterName)) fail(400, '이름을 1~40자로 입력해 주세요.');
+  const cookieHeader = req.headers.cookie || '';
+  let voterKey = cookieHeader.match(/moa_pvid=([0-9a-fA-F-]{36})/)?.[1] || randomUUID();
+  let loggedUserId = null;
+  const sessCookie = cookieHeader.match(/session=([a-zA-Z0-9_-]+)/)?.[1];
+  if (sessCookie) {
+   const logged = await one('SELECT user_id FROM sessions WHERE token=$1 AND expires>$2', hash(sessCookie), Date.now());
+   if (logged) loggedUserId = logged.user_id;
+  }
+  await transaction(async client => {
+   await client.query('DELETE FROM schedule_poll_votes WHERE poll_id=$1 AND voter_key=$2', [poll.id, voterKey]);
+   for (const entry of voteEntries) {
+    if (!validOptionIds.has(entry.option_id)) continue;
+    if (!['yes', 'maybe'].includes(entry.availability)) continue;
+    await client.query(
+     'INSERT INTO schedule_poll_votes(id, poll_id, option_id, voter_key, voter_name, user_id, availability) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(option_id, voter_key) DO UPDATE SET voter_name=excluded.voter_name, availability=excluded.availability',
+     [randomUUID(), poll.id, entry.option_id, voterKey, voterName, loggedUserId, entry.availability]
+    );
+   }
+  });
+  res.setHeader('Set-Cookie', `moa_pvid=${voterKey}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly`);
+  if (isJson) return json({ ok: true });
+  return redirect(`/poll/${encodeURIComponent(pollToken)}?voted=1`);
+ }
+ const pollViewRoute = p.match(/^\/poll\/([a-zA-Z0-9_-]+)$/);
+ if (pollViewRoute && ['GET', 'HEAD'].includes(req.method)) {
+  const pollToken = pollViewRoute[1];
+  const poll = await one(`
+   SELECT p.*, u.name AS creator_name
+   FROM schedule_polls p
+   JOIN users u ON u.id = p.creator_id
+   WHERE p.token = $1
+  `, pollToken);
+  if (!poll) {
+   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+   return res.end(req.method === 'HEAD' ? undefined : '약속 투표를 찾을 수 없습니다.');
+  }
+  const options = await all('SELECT * FROM schedule_poll_options WHERE poll_id=$1 ORDER BY start_time ASC', poll.id);
+  const votes = await all('SELECT * FROM schedule_poll_votes WHERE poll_id=$1 ORDER BY created_at ASC', poll.id);
+  const cookieHeader = req.headers.cookie || '';
+  const voterKey = cookieHeader.match(/moa_pvid=([0-9a-fA-F-]{36})/)?.[1] || '';
+  const isExpired = Boolean(poll.expires_at && new Date(poll.expires_at) < new Date());
+  const votedSuccess = url.searchParams.get('voted') === '1';
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.end(req.method === 'HEAD' ? undefined : renderPollPageHtml({ poll, options, votes, voterKey, origin, isExpired, votedSuccess }));
+ }
+ const invitePageMatch = p.match(/^\/invite\/([a-zA-Z0-9_-]+)\/?$/);
+ if (invitePageMatch && ['GET', 'HEAD'].includes(req.method)) {
+  let inviteMeta = null;
+  try {
+    const inv = await one(`
+      SELECT c.name AS calendar_name, u.name AS owner_name, i.role
+      FROM invites i
+      JOIN calendars c ON c.id = i.calendar_id
+      JOIN users u ON u.id = c.owner
+      WHERE i.token = $1 AND i.expires > $2 AND c.status = 'ACTIVE'
+    `, hash(invitePageMatch[1]), Date.now());
+    if (inv) {
+      const owner = inv.owner_name || '사용자';
+      const calName = inv.calendar_name || '공유 캘린더';
+      inviteMeta = {
+        title: `${owner}님이 '${calName}' 캘린더에 초대했어요 · 모아 캘린더`,
+        description: `링크 하나로 '${calName}' 공유 캘린더에 바로 참여하고 일정을 실시간으로 함께 관리해 보세요.`,
+        pageUrl: `${origin}/invite/${invitePageMatch[1]}`
+      };
+    }
+  } catch {}
+  if (servePublicPage(req, res, p, origin, inviteMeta)) return;
+ }
  if (servePublicPage(req, res, p, origin)) return;
  const user=cookies.session?await one('SELECT users.*,sessions.expires FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=$1 AND expires>$2',hash(cookies.session),Date.now()):null;
  if(user?.status==='SUSPENDED') fail(403,'이용이 정지된 계정입니다.');
+ if(p==='/api/analytics/event'&&req.method==='POST'){
+  const b=await body(req);
+  const eventName=typeof b.event==='string'?b.event.trim():'';
+  if(!FUNNEL_EVENTS.has(eventName))fail(400,'지원하지 않는 이벤트입니다.');
+  const source=typeof b.source==='string'?b.source.trim().replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40):'';
+  const visitorId=typeof b.visitorId==='string'?b.visitorId.trim().slice(0,100):'';
+  const sessionId=typeof b.sessionId==='string'?b.sessionId.trim().slice(0,100):'';
+  const screenWidth=Number.isFinite(Number(b.screenWidth))?Number(b.screenWidth):undefined;
+  const endpoint=resolveAnalyticsEndpoint();
+  let forwarded=false;
+  if(endpoint){
+   try{
+    const eventPath=`/_event/${eventName}${source?`?source=${encodeURIComponent(source)}`:''}`;
+    const upstream=await fetch(endpoint,{
+     method:'POST',
+     headers:{
+      'Content-Type':'application/json',
+      'Origin':origin,
+      ...(req.headers['user-agent']?{'User-Agent':String(req.headers['user-agent']).slice(0,500)}:{}),
+      ...(req.headers['x-forwarded-for']?{'X-Forwarded-For':String(req.headers['x-forwarded-for'])}:{})
+     },
+     body:JSON.stringify({
+      siteId:'moa-calendar',
+      path:eventPath,
+      referrer:typeof b.referrer==='string'?b.referrer.slice(0,500):null,
+      ...(screenWidth!==undefined?{screenWidth}:{}),
+      ...(visitorId?{visitorId}:{}),
+      ...(sessionId?{sessionId}:{})
+     }),
+     signal:AbortSignal.timeout(5000)
+    });
+    forwarded=upstream.ok;
+   }catch{}
+  }
+  return json({ok:true,event:eventName,forwarded});
+ }
+ if(p==='/api/feedback'&&req.method==='POST'){
+  const b=await body(req);
+  const category=['feature','bug','other'].includes(b.category)?b.category:'feature';
+  const rawMessage=typeof b.message==='string'?b.message.trim():'';
+  if(!rawMessage)fail(400,'피드백 내용을 입력해 주세요.');
+  if(rawMessage.length>1900)fail(400,'피드백은 최대 1,900자까지 작성할 수 있습니다.');
+  const contact=typeof b.contact==='string'?b.contact.trim():'';
+  if(contact.length>120||/[\x00-\x1f\x7f]/.test(contact))fail(400,'연락처 형식을 확인해 주세요.');
+  const pagePath=typeof b.page==='string'?b.page.trim().slice(0,120):'';
+  const clientType=typeof b.client==='string'?b.client.trim().slice(0,40):'web';
+  const categoryLabels={feature:'기능 개선',bug:'버그 제보',other:'기타 의견'};
+  const lines=[`[${categoryLabels[category]}]`,rawMessage];
+  if(contact)lines.push('',`연락처: ${contact}`);
+  if(pagePath)lines.push(`화면: ${pagePath}`);
+  const formattedMessage=lines.join('\n').slice(0,2000);
+  const userId=user?(user.name?`${user.name} (${user.id})`:user.id).slice(0,120):null;
+  const forwardedFor=String(req.headers['x-forwarded-for']||req.socket?.remoteAddress||'').trim();
+  const userAgent=String(req.headers['user-agent']||'').slice(0,500);
+  const payload={
+   app:'MoaCalendar',
+   userId,
+   deviceId:clientType,
+   deviceModel:clientType,
+   appVersion:'web',
+   message:formattedMessage
+  };
+  try{
+   const upstream=await fetch(resolveFeedbackEndpoint(),{
+    method:'POST',
+    headers:{
+     'Content-Type':'application/json',
+     ...(forwardedFor?{'X-Forwarded-For':forwardedFor}:{}),
+     ...(userAgent?{'User-Agent':userAgent}:{})
+    },
+    body:JSON.stringify(payload),
+    signal:AbortSignal.timeout(10000)
+   });
+   const data=await upstream.json().catch(()=>({}));
+   if(!upstream.ok){
+    if(upstream.status===429)fail(429,data.error||'요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.');
+    if(upstream.status===400)fail(400,data.error||'피드백 내용을 확인해 주세요.');
+    fail(502,'피드백을 접수하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+   }
+   return json({ok:true,id:data.id||null,message:'피드백이 성공적으로 접수되었습니다.'});
+  }catch(err){
+   if(err.status)throw err;
+   fail(502,'피드백을 접수하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+ }
  if(p==='/api/me'&&req.method==='GET'){
   let linked = [];
   let hasGoogleCalendar = false;
@@ -334,6 +606,31 @@ async function handleRequest(req,res){
  for(const c of affected){broadcast(c.calendar_id,'presence');broadcast(c.calendar_id,'members');}
  return json({user:{id:user.id,name}});
  }
+ if(p==='/api/me'&&req.method==='DELETE'){
+  if(!user)fail(401,'로그인이 필요합니다.');
+  await deleteUserAccount({transaction,clients,broadcast,userId:user.id});
+  res.setHeader('Set-Cookie',cookie('session','',0));
+  return json({ok:true});
+ }
+ if(p==='/auth/email/forgot'&&req.method==='POST'){
+  const b=await body(req), email=normalizeEmail(b.email);
+  if(!validEmail(email))fail(400,'올바른 이메일 주소를 입력해 주세요.');
+  const emailKey=`reset:${email}`;
+  if(passwordLimit(emailKey))fail(429,'잠시 후 다시 시도해 주세요.');
+  recordPasswordAttempt(emailKey);
+  await requestPasswordReset({one,run,hash,origin,email});
+  return json({ok:true,message:'가입된 이메일이라면 비밀번호 재설정 안내를 보냈습니다.'});
+ }
+ if(p==='/auth/email/reset'&&req.method==='POST'){
+  const b=await body(req);
+  const resetToken=typeof b.token==='string'?b.token.trim():'';
+  const password=typeof b.password==='string'?b.password:'';
+  if(!resetToken)fail(400,'재설정 토큰이 필요합니다.');
+  if(password.length<12||password.length>128)fail(400,'비밀번호는 12~128자로 입력해 주세요.');
+  await completePasswordReset({transaction,hash,hashPassword,token:resetToken,password});
+  res.setHeader('Set-Cookie',cookie('session','',0));
+  return json({ok:true,message:'비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요.'});
+ }
  if(p==='/auth/email/register'&&req.method==='POST'){
   const b=await body(req),email=normalizeEmail(b.email),password=b.password,name=typeof b.name==='string'?b.name.trim():'';
   if(!validEmail(email))fail(400,'올바른 이메일 주소를 입력해 주세요.');
@@ -344,9 +641,9 @@ async function handleRequest(req,res){
   if(passwordLimit(emailKey))fail(429,'잠시 후 다시 시도해 주세요.');
   recordPasswordAttempt(emailKey);
   const passwordHash=await hashPassword(password),id=`email:${randomUUID()}`;
-  try{await transaction(async client=>{await client.query('INSERT INTO users(id,name) VALUES($1,$2)',[id,name]);await client.query('INSERT INTO local_accounts(user_id,email,password_hash,terms_accepted_at) VALUES($1,$2,$3,now())',[id,email,passwordHash]);});}
+  try{await transaction(async client=>{await client.query('INSERT INTO users(id,name) VALUES($1,$2)',[id,name]);await client.query('INSERT INTO local_accounts(user_id,email,password_hash,terms_accepted_at) VALUES($1,$2,$3,now())',[id,email,passwordHash]);await ensureDefaultCalendar(client,id);});}
   catch(error){if(error.code==='23505')fail(409,'이미 가입된 이메일입니다.');throw error;}
-  await signIn(res,id,name);return json({ok:true},201);
+  await signIn(res,id,name);return json({ok:true,isNewUser:true},201);
  }
  if(p==='/auth/email/login'&&req.method==='POST'){
   const b=await body(req),email=normalizeEmail(b.email),password=typeof b.password==='string'?b.password:'';
@@ -429,14 +726,21 @@ async function handleRequest(req,res){
  }
  const existingAcc = await one('SELECT user_id FROM user_accounts WHERE provider=$1 AND provider_id=$2', provider, String(id));
  let effectiveUserId = existingAcc?.user_id;
+ let isNewUser = false;
  if(!effectiveUserId){
   effectiveUserId = `${provider}:${id}`;
-  await run('INSERT INTO users(id,name) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET updated_at=now()', effectiveUserId, provider==='google'?'구글 사용자':(info.kakao_account?.profile?.nickname||'카카오 사용자'));
-  await run('INSERT INTO user_accounts(provider,provider_id,user_id) VALUES($1,$2,$3) ON CONFLICT(provider,provider_id) DO NOTHING',provider,String(id),effectiveUserId);
+  const displayName = provider==='google'?'구글 사용자':(info.kakao_account?.profile?.nickname||'카카오 사용자');
+  await transaction(async client=>{
+   const prev=(await client.query('SELECT id FROM users WHERE id=$1',[effectiveUserId])).rows[0];
+   if(!prev)isNewUser=true;
+   await client.query('INSERT INTO users(id,name) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET updated_at=now()',[effectiveUserId,displayName]);
+   await client.query('INSERT INTO user_accounts(provider,provider_id,user_id) VALUES($1,$2,$3) ON CONFLICT(provider,provider_id) DO NOTHING',[provider,String(id),effectiveUserId]);
+   if(isNewUser)await ensureDefaultCalendar(client,effectiveUserId);
+  });
  }
 
  await signIn(res, effectiveUserId, provider==='google'?'구글 사용자':(info.kakao_account?.profile?.nickname||'카카오 사용자'));
- return redirect(returnUrl);
+ return redirect(isNewUser?withResult('welcome','1'):returnUrl);
  }
  if(p==='/api/push/vapid-public-key'&&req.method==='GET'){
   return json({publicKey:getVapidPublicKey()});
@@ -461,6 +765,55 @@ async function handleRequest(req,res){
    url:'/'
   });
   return json({ok:true,sentCount:result.sentCount});
+ }
+ if(p==='/api/push/briefing'&&req.method==='GET'){
+  const pref=await one('SELECT enabled, briefing_time, location_name, latitude, longitude FROM daily_briefing_preferences WHERE user_id=$1',user.id).catch(()=>null);
+  return json(pref||{enabled:false,briefing_time:'08:00',location_name:'서울',latitude:37.5665,longitude:126.9780});
+ }
+ if(p==='/api/push/briefing'&&req.method==='PUT'){
+  const b=await body(req);
+  const enabled=Boolean(b.enabled);
+  const briefingTime=typeof b.briefing_time==='string'&&/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(b.briefing_time.trim())?b.briefing_time.trim():'08:00';
+  const locationName=(typeof b.location_name==='string'&&b.location_name.trim()?b.location_name.trim():'서울').slice(0,80);
+  const lat=Number.isFinite(Number(b.latitude))?Number(b.latitude):37.5665;
+  const lon=Number.isFinite(Number(b.longitude))?Number(b.longitude):126.9780;
+  if(lat<-90||lat>90||lon<-180||lon>180)fail(400,'위치 좌표를 확인해 주세요.');
+  await run(
+   `INSERT INTO daily_briefing_preferences(user_id,enabled,briefing_time,location_name,latitude,longitude,updated_at)
+    VALUES($1,$2,$3,$4,$5,$6,now())
+    ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled,briefing_time=excluded.briefing_time,location_name=excluded.location_name,latitude=excluded.latitude,longitude=excluded.longitude,updated_at=now()`,
+   user.id,enabled,briefingTime,locationName,lat,lon
+  );
+  return json({ok:true,enabled,briefing_time:briefingTime,location_name:locationName,latitude:lat,longitude:lon});
+ }
+ if(p==='/api/push/briefing/test'&&req.method==='POST'){
+  const pref=await one('SELECT location_name, latitude, longitude FROM daily_briefing_preferences WHERE user_id=$1',user.id).catch(()=>null);
+  const {dateStr:todayKst}=getKstDateAndTime();
+  const todayEvents=await all(
+   `SELECT e.title, e.start, e.all_day FROM events e
+    JOIN members m ON m.calendar_id=e.calendar_id JOIN calendars c ON c.id=e.calendar_id
+    WHERE m.user_id=$1 AND c.status='ACTIVE' AND (e.is_cancelled IS NOT TRUE)
+      AND e.start<=$2 AND e."end">=$3
+    ORDER BY e.all_day DESC, e.start ASC LIMIT 20`,
+   user.id,`${todayKst}T23:59:59`,`${todayKst}T00:00:00`
+  );
+  const ddayRow=await one(
+   `SELECT e.title, e.start FROM events e
+    JOIN members m ON m.calendar_id=e.calendar_id JOIN calendars c ON c.id=e.calendar_id
+    WHERE m.user_id=$1 AND c.status='ACTIVE' AND (e.is_cancelled IS NOT TRUE) AND e.is_dday=true AND substr(e.start,1,10)>=$2
+    ORDER BY e.start ASC LIMIT 1`,
+   user.id,todayKst
+  );
+  let nearestDday=null;
+  if(ddayRow){
+   const dDate=String(ddayRow.start).slice(0,10);
+   const diffDays=Math.round((Date.parse(`${dDate}T00:00:00Z`)-Date.parse(`${todayKst}T00:00:00Z`))/86400000);
+   if(diffDays>=0&&diffDays<=365)nearestDday={title:ddayRow.title,diffDays};
+  }
+  const weatherToday=await fetchTodayWeatherSummary({latitude:pref?.latitude??37.5665,longitude:pref?.longitude??126.9780,date:todayKst}).catch(()=>null);
+  const payload=buildDailyBriefingMessage({todayEvents,weatherToday,nearestDday,locationName:pref?.location_name||'서울'});
+  const result=await sendPushToUser({all,run},user.id,payload);
+  return json({ok:true,sentCount:result.sentCount,preview:payload.body});
  }
  if(p==='/api/me/google-calendar' && req.method==='DELETE'){
   const credentials=await clearGoogleCalendar(user.id);
@@ -727,6 +1080,53 @@ async function handleRequest(req,res){
     expires_at: expiresAt
   }, 201);
  }
+ const shareImportMatch = p.match(/^\/api\/schedule-shares\/([a-zA-Z0-9_-]+)\/import$/);
+ if(shareImportMatch && req.method === 'POST'){
+  if(!user) fail(401, '로그인이 필요합니다.');
+  const { share, isExpired, isRevoked, events: sharedEvents } = await loadShareWithEvents(shareImportMatch[1]);
+  if(!share) fail(404, '공유 일정을 찾을 수 없습니다.');
+  if(isExpired || isRevoked) fail(410, '공유 기간이 만료되었거나 중단된 일정입니다.');
+  const editableCal = await one(`
+    SELECT c.id, c.name
+    FROM calendars c
+    JOIN members m ON m.calendar_id = c.id
+    LEFT JOIN calendar_order o ON o.calendar_id = c.id AND o.user_id = m.user_id
+    WHERE m.user_id = $1 AND c.status = 'ACTIVE' AND m.role IN ('owner', 'editor')
+      AND (c.source_provider IS NULL OR c.source_provider != 'google')
+      AND NOT EXISTS (SELECT 1 FROM external_calendars ec WHERE ec.calendar_id = c.id AND (ec.is_read_only OR ec.sync_direction = 'read_only'))
+    ORDER BY o.sort_order NULLS LAST, c.created_at, c.id
+    LIMIT 1
+  `, user.id);
+  const result = await transaction(async client => {
+    let targetCalId = editableCal?.id;
+    if(!targetCalId){
+      const created = await ensureDefaultCalendar(client, user.id);
+      if(created) targetCalId = created.id;
+      else {
+        const id = randomUUID(), slug = randomBytes(4).toString('hex');
+        await client.query('INSERT INTO calendars(id,name,owner,slug) VALUES($1,$2,$3,$4)', [id, '내 캘린더', user.id, slug]);
+        await client.query('INSERT INTO members(calendar_id,user_id,role) VALUES($1,$2,$3)', [id, user.id, 'owner']);
+        targetCalId = id;
+      }
+    }
+    const existingRows = (await client.query('SELECT title, start, "end" FROM events WHERE calendar_id=$1', [targetCalId])).rows;
+    const seen = new Set(existingRows.map(r => `${r.title}\u0000${r.start}\u0000${r.end}`));
+    let importedCount = 0, skippedCount = 0;
+    for(const ev of sharedEvents){
+      const key = `${ev.title}\u0000${ev.start}\u0000${ev.end}`;
+      if(seen.has(key)){ skippedCount++; continue; }
+      seen.add(key);
+      await client.query(
+        'INSERT INTO events(id,calendar_id,title,start,"end",all_day,color,category,notes,location,is_todo,completed,reminder_enabled,reminder_minutes,is_dday,is_cancelled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,false,10,$13,false)',
+        [randomUUID(), targetCalId, ev.title, ev.start, ev.end, Boolean(ev.all_day), EVENT_COLORS.includes(ev.color)?ev.color:'sage', ev.category||'', ev.notes||'', String(ev.location||'').slice(0,200), Boolean(ev.is_todo), Boolean(ev.completed), Boolean(ev.is_dday)]
+      );
+      importedCount++;
+    }
+    return { calendarId: targetCalId, importedCount, skippedCount };
+  });
+  if(result.importedCount > 0) broadcast(result.calendarId, 'change');
+  return json({ ok: true, ...result });
+ }
  const shareDetailsMatch = p.match(/^\/api\/schedule-shares\/([a-zA-Z0-9_-]+)$/);
  if(shareDetailsMatch){
   if(!user) fail(401, '로그인이 필요합니다.');
@@ -784,6 +1184,114 @@ async function handleRequest(req,res){
     fail(400, '잘못된 수정 요청입니다.');
   }
  }
+ const eventCollabMatch = p.match(/^\/api\/events\/([^/]+)\/(collaboration|rsvp|comments|reactions)(?:\/([^/]+))?$/);
+ if (eventCollabMatch) {
+  const [, targetEventId, action, subId] = eventCollabMatch;
+  const ev = await one(
+   `SELECT e.id, e.calendar_id, e.title, e.created_by, e.updated_by, c.name AS calendar_name, m.role,
+           cu.name AS creator_name, uu.name AS updater_name
+    FROM events e
+    JOIN calendars c ON c.id = e.calendar_id
+    JOIN members m ON m.calendar_id = e.calendar_id AND m.user_id = $2
+    LEFT JOIN users cu ON cu.id = e.created_by
+    LEFT JOIN users uu ON uu.id = e.updated_by
+    WHERE e.id = $1 AND c.status = 'ACTIVE'`,
+   targetEventId, user.id
+  );
+  if (!ev) fail(404, '일정을 찾을 수 없습니다.');
+
+  if (action === 'collaboration' && req.method === 'GET') {
+   const [memberCountRow, rsvps, comments, reactions] = await Promise.all([
+    one('SELECT count(*)::int AS cnt FROM members WHERE calendar_id=$1', ev.calendar_id),
+    all('SELECT r.user_id, r.status, r.updated_at, u.name FROM event_rsvps r JOIN users u ON u.id=r.user_id WHERE r.event_id=$1 ORDER BY r.updated_at ASC', ev.id),
+    all('SELECT c.id, c.user_id, c.body, c.created_at, u.name FROM event_comments c JOIN users u ON u.id=c.user_id WHERE c.event_id=$1 AND c.deleted_at IS NULL ORDER BY c.created_at ASC LIMIT 100', ev.id),
+    all('SELECT r.emoji, r.user_id, u.name FROM event_reactions r JOIN users u ON u.id=r.user_id WHERE r.event_id=$1 ORDER BY r.created_at ASC', ev.id)
+   ]);
+   return json({
+    eventId: ev.id,
+    memberCount: memberCountRow?.cnt || 1,
+    creatorName: ev.creator_name || null,
+    updaterName: ev.updater_name || null,
+    rsvps,
+    comments,
+    reactions,
+    currentUserId: user.id,
+    canModerate: ev.role === 'owner'
+   });
+  }
+
+  if (action === 'rsvp' && req.method === 'PUT') {
+   const b = await body(req);
+   const status = String(b.status || '').trim();
+   if (!['going', 'maybe', 'declined'].includes(status)) fail(400, '참석 상태를 확인해 주세요.');
+   await run(
+    'INSERT INTO event_rsvps(event_id, user_id, status, updated_at) VALUES($1,$2,$3,now()) ON CONFLICT(event_id, user_id) DO UPDATE SET status=excluded.status, updated_at=now()',
+    ev.id, user.id, status
+   );
+   const label = status === 'going' ? '참석' : status === 'maybe' ? '미정' : '불참';
+   await recordCalendarActivity(run, { calendarId: ev.calendar_id, eventId: ev.id, actorId: user.id, actorName: user.name, action: 'rsvp', summary: `'${ev.title}' 일정에 '${label}'으로 응답했어요.` });
+   broadcast(ev.calendar_id, 'event-collab');
+   return json({ ok: true, status });
+  }
+
+  if (action === 'comments' && req.method === 'POST') {
+   const b = await body(req);
+   const text = typeof b.body === 'string' ? b.body.trim() : '';
+   if (!validText(text, 500)) fail(400, '댓글은 1~500자로 입력해 주세요.');
+   const cid = randomUUID();
+   await run('INSERT INTO event_comments(id, event_id, calendar_id, user_id, body) VALUES($1,$2,$3,$4,$5)', cid, ev.id, ev.calendar_id, user.id, text);
+   await recordCalendarActivity(run, { calendarId: ev.calendar_id, eventId: ev.id, actorId: user.id, actorName: user.name, action: 'comment', summary: `'${ev.title}'에 댓글: ${text.slice(0, 60)}` });
+   notifyCalendarActivity({ all, run }, { calendarId: ev.calendar_id, calendarName: ev.calendar_name, actorUserId: user.id, actorName: user.name, action: 'comment', eventTitle: `${ev.title} — ${text.slice(0, 40)}` }).catch(() => {});
+   broadcast(ev.calendar_id, 'event-collab');
+   return json({ ok: true, id: cid }, 201);
+  }
+
+  if (action === 'comments' && req.method === 'DELETE' && subId) {
+   const existing = await one('SELECT id, user_id FROM event_comments WHERE id=$1 AND event_id=$2 AND deleted_at IS NULL', subId, ev.id);
+   if (!existing) fail(404, '댓글을 찾을 수 없습니다.');
+   if (existing.user_id !== user.id && ev.role !== 'owner') fail(403, '댓글을 삭제할 권한이 없습니다.');
+   await run('UPDATE event_comments SET deleted_at=now() WHERE id=$1', subId);
+   broadcast(ev.calendar_id, 'event-collab');
+   return json({ ok: true });
+  }
+
+  if (action === 'reactions' && req.method === 'POST') {
+   const b = await body(req);
+   const emoji = typeof b.emoji === 'string' ? b.emoji.trim() : '';
+   if (!ALLOWED_REACTION_EMOJIS.includes(emoji)) fail(400, '지원하지 않는 이모지입니다.');
+   const existing = await one('SELECT 1 FROM event_reactions WHERE event_id=$1 AND user_id=$2 AND emoji=$3', ev.id, user.id, emoji);
+   if (existing) {
+    await run('DELETE FROM event_reactions WHERE event_id=$1 AND user_id=$2 AND emoji=$3', ev.id, user.id, emoji);
+   } else {
+    await run('INSERT INTO event_reactions(event_id, user_id, emoji) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', ev.id, user.id, emoji);
+   }
+   broadcast(ev.calendar_id, 'event-collab');
+   return json({ ok: true, active: !existing });
+  }
+ }
+
+ const pollConfirmMatch = p.match(/^\/api\/polls\/([^/]+)\/confirm$/);
+ if (pollConfirmMatch && req.method === 'POST') {
+  const pollId = pollConfirmMatch[1];
+  const poll = await one('SELECT * FROM schedule_polls WHERE id=$1', pollId);
+  if (!poll) fail(404, '투표를 찾을 수 없습니다.');
+  await writeAccess(poll.calendar_id, user);
+  const b = await body(req);
+  const option = await one('SELECT * FROM schedule_poll_options WHERE id=$1 AND poll_id=$2', String(b.option_id || ''), poll.id);
+  if (!option) fail(404, '선택한 후보 시간을 찾을 수 없습니다.');
+  const newEventId = randomUUID();
+  await transaction(async client => {
+   await client.query(
+    'INSERT INTO events(id,calendar_id,title,start,"end",color,notes,category,all_day,is_todo,completed,reminder_enabled,reminder_minutes,is_dday,is_cancelled,location,created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,false,false,false,false,10,false,false,$9,$10,$10)',
+    [newEventId, poll.calendar_id, poll.title, option.start_time, option.end_time, 'sage', '약속 시간 투표로 확정된 일정이에요.', '약속', poll.location || '', user.id]
+   );
+   await client.query("UPDATE schedule_polls SET status='CONFIRMED', confirmed_event_id=$1 WHERE id=$2", [newEventId, poll.id]);
+  });
+  await recordCalendarActivity(run, { calendarId: poll.calendar_id, eventId: newEventId, actorId: user.id, actorName: user.name, action: 'poll_confirm', summary: `'${poll.title}' 약속 시간을 확정했어요.` });
+  broadcast(poll.calendar_id, 'change');
+  return json({ ok: true, eventId: newEventId });
+ }
+
  if(p==='/api/calendars' && req.method==='GET')return json(await all("SELECT c.*,m.role,c.source_provider='google' AS is_google,(c.source_provider='icloud' OR EXISTS(SELECT 1 FROM external_calendars ec WHERE ec.calendar_id=c.id)) AS is_icloud,(m.role='viewer' OR c.source_provider='google' OR EXISTS(SELECT 1 FROM external_calendars ec WHERE ec.calendar_id=c.id AND (ec.is_read_only OR ec.sync_direction='read_only'))) AS read_only FROM calendars c JOIN members m ON m.calendar_id=c.id LEFT JOIN calendar_order o ON o.calendar_id=c.id AND o.user_id=m.user_id WHERE m.user_id=$1 AND c.status='ACTIVE' ORDER BY o.sort_order NULLS LAST,c.created_at,c.id",user.id));
  if(p==='/api/calendars/order'&&req.method==='PUT'){
   const b=await body(req),ids=b.calendarIds;
@@ -909,7 +1417,7 @@ async function handleRequest(req,res){
    }
    return json({ok:true});
   }
- const route=p.match(/^\/api\/calendars\/([\w-]+)\/(events|monthly-items|stream|invites|details|settings|members|access|administrator|notes|month-notes)(?:\/([\w-]+))?$/);
+ const route=p.match(/^\/api\/calendars\/([\w-]+)\/(events|monthly-items|stream|invites|details|settings|members|access|administrator|notes|month-notes|activities|polls|ical-feed)(?:\/([\w-]+))?$/);
  if(!route)fail(404,'경로를 찾을 수 없습니다.');const [,ident,kind,eventId]=route;const m=await member(ident,user);const id=m.id,role=m.role;
  if(kind==='monthly-items'){
   const validMonth=value=>typeof value==='string'&&/^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$/.test(value);
@@ -1064,16 +1572,75 @@ async function handleRequest(req,res){
  }
  if(kind==='invites' && req.method==='POST'){if(role!=='owner')fail(403,'캘린더 관리자만 초대할 수 있습니다.');const b=await body(req);const t=token(),inviteRole=b.role==='viewer'?'viewer':'editor',expires=Date.now()+604800000;await administratorTask(id,user,client=>client.query('INSERT INTO invites(token,calendar_id,role,expires,raw_token) VALUES($1,$2,$3,$4,$5)',[hash(t),id,inviteRole,expires,t]));broadcast(id,'members');return json({url:`${origin}/invite/${t}`,token:t,role:inviteRole,expires});}
  if(kind==='invites' && req.method==='DELETE'){if(role!=='owner')fail(403,'관리자만 초대를 취소할 수 있습니다.');await administratorTask(id,user,client=>eventId?client.query('DELETE FROM invites WHERE calendar_id=$1 AND token=$2',[id,eventId]):client.query('DELETE FROM invites WHERE calendar_id=$1',[id]));broadcast(id,'members');return json({ok:true});}
+ if(kind==='ical-feed'){
+  if(req.method==='GET'){
+   if(role!=='owner')return json({url:null,webcalUrl:null});
+   return json(await getCalendarIcalFeed({one,origin,calendarId:id}));
+  }
+  if(req.method==='POST'){
+   if(role!=='owner')fail(403,'캘린더 관리자만 구독 링크를 발급할 수 있습니다.');
+   return json(await rotateCalendarIcalFeed({run,origin,calendarId:id,userId:user.id}),201);
+  }
+  if(req.method==='DELETE'){
+   if(role!=='owner')fail(403,'캘린더 관리자만 구독 링크를 해제할 수 있습니다.');
+   return json(await revokeCalendarIcalFeed({run,calendarId:id}));
+  }
+ }
+ if(kind==='activities'&&req.method==='GET'){
+  const memberCountRow=await one('SELECT count(*)::int AS cnt FROM members WHERE calendar_id=$1',id);
+  const rows=await all('SELECT id, event_id, actor_name, action, summary, created_at FROM calendar_activities WHERE calendar_id=$1 ORDER BY created_at DESC LIMIT 20',id).catch(()=>[]);
+  return json({memberCount:memberCountRow?.cnt||1,activities:rows});
+ }
+ if(kind==='polls'&&req.method==='GET'){
+  const polls=await all('SELECT p.*, u.name AS creator_name FROM schedule_polls p JOIN users u ON u.id=p.creator_id WHERE p.calendar_id=$1 ORDER BY p.created_at DESC LIMIT 20',id);
+  const pollIds=polls.map(pl=>pl.id);
+  const opts=pollIds.length?await all('SELECT * FROM schedule_poll_options WHERE poll_id=ANY($1::text[]) ORDER BY start_time ASC',pollIds):[];
+  const votes=pollIds.length?await all('SELECT * FROM schedule_poll_votes WHERE poll_id=ANY($1::text[]) ORDER BY created_at ASC',pollIds):[];
+  return json(polls.map(pl=>({
+   ...pl,
+   url:`${origin}/poll/${pl.token}`,
+   options:opts.filter(o=>o.poll_id===pl.id).map(o=>{
+    const ov=votes.filter(v=>v.option_id===o.id);
+    return {...o,yesCount:ov.filter(v=>v.availability==='yes').length,maybeCount:ov.filter(v=>v.availability==='maybe').length,voters:ov.map(v=>({name:v.voter_name,availability:v.availability}))};
+   })
+  })));
+ }
+ if(kind==='polls'&&req.method==='POST'){
+  await writeAccess(id,user);
+  const b=await body(req);
+  const title=typeof b.title==='string'?b.title.trim():'';
+  if(!validText(title,100))fail(400,'약속 제목을 입력해 주세요.');
+  const location=typeof b.location==='string'?b.location.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,200):'';
+  const rawOptions=Array.isArray(b.options)?b.options:[];
+  if(rawOptions.length<2||rawOptions.length>5)fail(400,'후보 시간은 2~5개 입력해 주세요.');
+  const cleanOptions=[];
+  for(const o of rawOptions){
+   const s=String(o?.start_time||'').trim(), e=String(o?.end_time||'').trim();
+   if(!isValidLocalDateTime(s)||!isValidLocalDateTime(e)||e<=s)fail(400,'후보 시작·종료 시간을 확인해 주세요.');
+   cleanOptions.push({id:randomUUID(),start_time:s,end_time:e});
+  }
+  const pollId=randomUUID(), pollToken=randomBytes(8).toString('base64url');
+  const expiresAt=new Date(Date.now()+14*86400_000);
+  await transaction(async client=>{
+   await client.query('INSERT INTO schedule_polls(id,calendar_id,creator_id,title,location,token,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[pollId,id,user.id,title,location,pollToken,expiresAt]);
+   for(const o of cleanOptions){
+    await client.query('INSERT INTO schedule_poll_options(id,poll_id,start_time,end_time) VALUES($1,$2,$3,$4)',[o.id,pollId,o.start_time,o.end_time]);
+   }
+  });
+  return json({id:pollId,token:pollToken,url:`${origin}/poll/${pollToken}`,title,location,options:cleanOptions},201);
+ }
  if(kind==='events' && req.method==='GET')return json(await all('SELECT e.*,j.event_id IS NOT NULL AS sync_pending,j.last_error AS sync_error FROM events e LEFT JOIN calendar_move_jobs j ON j.event_id=e.id WHERE e.calendar_id=$1 ORDER BY e.start',id));
  if(kind==='events' && ['POST','PUT','DELETE'].includes(req.method)){
  await writeAccess(id,user);const b=await body(req);
  let existing;
  if(eventId&&await one('SELECT 1 FROM calendar_move_jobs WHERE event_id=$1',eventId))fail(409,'이 일정의 iCloud 이동을 동기화 중입니다. 잠시 후 다시 시도해 주세요.');
  if(eventId){existing=await one('SELECT * FROM events WHERE id=$1 AND calendar_id=$2',eventId,id);if(!existing)fail(404,'일정을 찾을 수 없습니다.');if(b.version!==existing.version)fail(409,'다른 사람이 일정을 변경했습니다. 최신 일정을 확인한 뒤 다시 저장해 주세요.');}
- if(req.method==='DELETE'){if(!eventId)fail(400,'일정 ID가 필요합니다.');const result=await run('DELETE FROM events WHERE id=$1 AND calendar_id=$2 AND version=$3',eventId,id,b.version);if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');syncEngine.pushLocalEventToExternal(eventId,'delete',{calendarId:id}).catch(e=>console.warn('Two-way sync delete failed:',e.message));notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'delete',eventTitle:existing?.title||''}).catch(e=>console.warn('Activity push failed:',e.message));}
+ if(req.method==='DELETE'){if(!eventId)fail(400,'일정 ID가 필요합니다.');if(b.series_scope==='future'&&existing?.series_id){await run('DELETE FROM events WHERE calendar_id=$1 AND series_id=$2 AND start>=$3',id,existing.series_id,existing.start);}else{const result=await run('DELETE FROM events WHERE id=$1 AND calendar_id=$2 AND version=$3',eventId,id,b.version);if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');}syncEngine.pushLocalEventToExternal(eventId,'delete',{calendarId:id}).catch(e=>console.warn('Two-way sync delete failed:',e.message));recordCalendarActivity(run,{calendarId:id,eventId,actorId:user.id,actorName:user.name,action:'delete',summary:`'${existing?.title||''}' 일정을 삭제했어요.`});notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'delete',eventTitle:existing?.title||''}).catch(e=>console.warn('Activity push failed:',e.message));}
  else{
  if((req.method==='PUT')!==Boolean(eventId))fail(400,'잘못된 일정 요청입니다.');
  const category=typeof b.category==='string'?b.category.trim():'';
+ const location=typeof b.location==='string'?b.location.replace(/[\x00-\x1f\x7f]/g,'').trim():(existing?.location||'');
+ if(location.length>200)fail(400,'장소는 최대 200자까지 입력할 수 있습니다.');
  if(b.all_day!==undefined && typeof b.all_day!=='boolean')fail(400,'하루 종일 옵션을 확인해 주세요.');
  const allDay=b.all_day??existing?.all_day??false;
   const isTodo=b.is_todo!==undefined?Boolean(b.is_todo):(existing?.is_todo??false);
@@ -1108,24 +1675,38 @@ async function handleRequest(req,res){
    const mapping=(await client.query('SELECT * FROM external_event_mappings WHERE local_event_id=$1 FOR UPDATE',[eventId])).rows[0];
    await client.query('INSERT INTO calendar_move_jobs(event_id,source_calendar_id,target_calendar_id,source_external_id,remote_url,remote_etag) VALUES($1,$2,$3,$4,$5,$6)',[eventId,id,targetId,mapping?.external_calendar_id||null,mapping?.external_object_url||null,mapping?.etag||null]);
    await client.query('DELETE FROM external_event_mappings WHERE local_event_id=$1',[eventId]);
-   await client.query('UPDATE events SET calendar_id=$1,title=$2,start=$3,"end"=$4,color=$5,notes=$6,category=$7,all_day=$8,is_todo=$9,completed=$10,reminder_enabled=$11,reminder_minutes=$12,is_dday=$13,is_cancelled=$14,version=version+1 WHERE id=$15',[targetId,b.title.trim(),b.start,b.end,b.color,b.notes,category,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled,eventId]);
+   await client.query('UPDATE events SET calendar_id=$1,title=$2,start=$3,"end"=$4,color=$5,notes=$6,category=$7,all_day=$8,is_todo=$9,completed=$10,reminder_enabled=$11,reminder_minutes=$12,is_dday=$13,is_cancelled=$14,location=$15,version=version+1 WHERE id=$16',[targetId,b.title.trim(),b.start,b.end,b.color,b.notes,category,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled,location,eventId]);
    });return true;
   });
   if(!lockedMove)fail(409,'iCloud 동기화가 진행 중입니다. 잠시 후 다시 이동해 주세요.');
   const synced=await calendarMoves.process(eventId);
   broadcast(id);broadcast(targetId);return json({ok:true,moved:true,syncPending:!synced});
  }
- if(eventId){const result=await run('UPDATE events SET title=$1,start=$2,"end"=$3,color=$4,notes=$5,category=$6,all_day=$10,is_todo=$11,completed=$12,reminder_enabled=$13,reminder_minutes=$14,is_dday=$15,is_cancelled=$16,version=version+1 WHERE id=$7 AND calendar_id=$8 AND version=$9',b.title.trim(),b.start,b.end,b.color,b.notes,category,eventId,id,b.version,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled);if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');syncEngine.pushLocalEventToExternal(eventId,'update',{calendarId:id,eventData:{id:eventId,title:b.title.trim(),start:b.start,end:b.end,all_day:allDay,notes:b.notes,version:existing.version+1}}).catch(e=>console.warn('Two-way sync update failed:',e.message));notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'update',eventTitle:b.title.trim()}).catch(e=>console.warn('Activity push failed:',e.message));}
+ if(eventId){
+  let result;
+  if(b.series_scope==='future'&&existing?.series_id){
+   await run('UPDATE events SET title=$1,color=$2,notes=$3,category=$4,is_todo=$5,is_dday=$6,is_cancelled=$7,reminder_enabled=$8,reminder_minutes=$9,location=$10,updated_by=$11,version=version+1 WHERE calendar_id=$12 AND series_id=$13 AND start>=$14',b.title.trim(),b.color,b.notes,category,isTodo,isDday,isCancelled,reminderEnabled,reminderMinutes,location,user.id,id,existing.series_id,existing.start);
+   result=await run('UPDATE events SET title=$1,start=$2,"end"=$3,color=$4,notes=$5,category=$6,all_day=$9,is_todo=$10,completed=$11,reminder_enabled=$12,reminder_minutes=$13,is_dday=$14,is_cancelled=$15,location=$16,updated_by=$17,version=version+1 WHERE id=$7 AND calendar_id=$8',b.title.trim(),b.start,b.end,b.color,b.notes,category,eventId,id,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled,location,user.id);
+  }else{
+   result=await run('UPDATE events SET title=$1,start=$2,"end"=$3,color=$4,notes=$5,category=$6,all_day=$10,is_todo=$11,completed=$12,reminder_enabled=$13,reminder_minutes=$14,is_dday=$15,is_cancelled=$16,location=$17,updated_by=$18,version=version+1 WHERE id=$7 AND calendar_id=$8 AND version=$9',b.title.trim(),b.start,b.end,b.color,b.notes,category,eventId,id,b.version,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled,location,user.id);
+  }
+  if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');syncEngine.pushLocalEventToExternal(eventId,'update',{calendarId:id,eventData:{id:eventId,title:b.title.trim(),start:b.start,end:b.end,all_day:allDay,notes:b.notes,location,version:existing.version+1}}).catch(e=>console.warn('Two-way sync update failed:',e.message));recordCalendarActivity(run,{calendarId:id,eventId,actorId:user.id,actorName:user.name,action:'update',summary:`'${b.title.trim()}' 일정을 수정했어요.`});notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'update',eventTitle:b.title.trim()}).catch(e=>console.warn('Activity push failed:',e.message));
+ }
  else {
+  let firstNewId=null;
+  const seriesId=ranges.length>1?randomUUID():null;
+  const recurrenceRule=ranges.length>1?JSON.stringify({frequency,calendarType,count}):null;
   await transaction(async client=>{
    for(const range of ranges){
     const newId=randomUUID();
-    await client.query('INSERT INTO events(id,calendar_id,title,start,"end",color,notes,category,all_day,is_todo,completed,reminder_enabled,reminder_minutes,is_dday,is_cancelled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',[newId,id,b.title.trim(),range.start,range.end,b.color,b.notes,category,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled]);
-    syncEngine.pushLocalEventToExternal(newId,'create',{calendarId:id,eventData:{id:newId,title:b.title.trim(),start:range.start,end:range.end,all_day:allDay,notes:b.notes}}).catch(e=>console.warn('Two-way sync create failed:',e.message));
+    if(!firstNewId)firstNewId=newId;
+    await client.query('INSERT INTO events(id,calendar_id,title,start,"end",color,notes,category,all_day,is_todo,completed,reminder_enabled,reminder_minutes,is_dday,is_cancelled,location,created_by,updated_by,series_id,recurrence_rule) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17,$18,$19::jsonb)',[newId,id,b.title.trim(),range.start,range.end,b.color,b.notes,category,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled,location,user.id,seriesId,recurrenceRule]);
+    syncEngine.pushLocalEventToExternal(newId,'create',{calendarId:id,eventData:{id:newId,title:b.title.trim(),start:range.start,end:range.end,all_day:allDay,notes:b.notes,location}}).catch(e=>console.warn('Two-way sync create failed:',e.message));
    }
   });
+  recordCalendarActivity(run,{calendarId:id,eventId:firstNewId,actorId:user.id,actorName:user.name,action:'create',summary:`'${b.title.trim()}' 일정을 등록했어요.`});
   notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'create',eventTitle:b.title.trim()}).catch(e=>console.warn('Activity push failed:',e.message));
-  broadcast(id);return json({ok:true,created:ranges.length});
+  broadcast(id);return json({ok:true,created:ranges.length,seriesId});
  }
  }broadcast(id);return json({ok:true});
  }fail(405,'허용되지 않은 요청입니다.');
@@ -1134,6 +1715,26 @@ async function handleRequest(req,res){
  fail(404,'페이지를 찾을 수 없습니다.');
  }catch(e){console.error('ERROR:',e.status,e.message,e.stack);if(res.headersSent){res.end();return;}json({error:e.status?e.message:'요청 처리 중 오류가 발생했습니다.'},e.status||500);}
 }
+async function fetchTodayWeatherSummary({latitude=37.5665,longitude=126.9780,date}){
+ const cacheKey=`${Number(latitude).toFixed(3)},${Number(longitude).toFixed(3)},Asia/Seoul`;
+ let data=weatherForecastCache.get(cacheKey)?.data;
+ if(!data){
+  const upstream=await fetch(buildOpenMeteoForecastUrl({latitude,longitude,timezone:'Asia/Seoul'}),{signal:AbortSignal.timeout(6000)});
+  if(!upstream.ok)return null;
+  const raw=await upstream.json();
+  data={daily:raw.daily||{},hourly:raw.hourly||{}};
+  weatherForecastCache.set(cacheKey,{expires:Date.now()+30*60_000,data});
+ }
+ const idx=(data.daily?.time||[]).indexOf(date);
+ if(idx===-1)return null;
+ const info=getWeatherInfo(data.daily.weather_code?.[idx]);
+ return {
+  emoji:info.emoji,
+  rainProbability:data.daily.precipitation_probability_max?.[idx]??0,
+  tempMin:data.daily.temperature_2m_min?.[idx],
+  tempMax:data.daily.temperature_2m_max?.[idx]
+ };
+}
 const server=http.createServer(handleRequest);
 export { server, db, handleRequest, syncEngine, calendarMoves, startReminderWorker };
 const shouldListen = !process.env.NODE_TEST_CONTEXT && (process.argv[1]?.endsWith('server.mjs') || process.env.pm_id !== undefined || process.env.PM2_HOME);
@@ -1141,5 +1742,5 @@ if (shouldListen) {
   server.listen(port,'127.0.0.1',()=>console.log(`모아 캘린더: ${origin} (포트 ${port})${demo?' (개발용 체험 모드)':''}`));
   calendarMoves.start();
   syncEngine.startBackgroundSync(Number(process.env.CALDAV_SYNC_INTERVAL_MS || 15 * 60 * 1000));
-  startReminderWorker({all,run});
+  startReminderWorker({all,run,fetchWeather:fetchTodayWeatherSummary});
 }

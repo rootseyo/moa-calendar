@@ -181,6 +181,16 @@ export function renderSharedScheduleHtml({ share, events = [], isExpired = false
   }
 
   const sortedDates = Array.from(eventsByDate.keys()).sort();
+  const baseOrigin = origin ? origin.replace(/\/$/, '') : '';
+  const ogUrl = share.token && baseOrigin ? `${baseOrigin}/s/${encodeURIComponent(share.token)}` : (baseOrigin || '/');
+  const ogImage = `${baseOrigin}/og-image.png`;
+  const ownerLabel = share.owner_name || '사용자';
+  const ogDesc = `${ownerLabel}님이 공유한 ${periodRangeText} 일정 (${events.length}건) · 모아 캘린더에서 바로 확인하세요.`;
+  const safeToken = share.token ? encodeURIComponent(share.token) : '';
+  const icsDownloadUrl = safeToken ? `/s/${safeToken}/calendar.ics` : '';
+  const importToMoaUrl = safeToken ? `${baseOrigin}/?import_share=${safeToken}&ref=share` : `${baseOrigin}/?ref=share`;
+  const trySandboxUrl = `${baseOrigin}/?try=1&ref=share`;
+  const startLoginUrl = `${baseOrigin}/?ref=share`;
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -188,9 +198,22 @@ export function renderSharedScheduleHtml({ share, events = [], isExpired = false
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(share.title)} · 모아 캘린더</title>
-  <meta name="description" content="${esc(share.title)} 읽기 전용 일정 공유">
-  <meta property="og:title" content="${esc(share.title)}">
-  <meta property="og:description" content="${esc(periodRangeText)} 일정 (${events.length}개의 일정)">
+  <meta name="description" content="${esc(ogDesc)}">
+  <meta name="robots" content="noindex, nofollow">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:site_name" content="모아 캘린더">
+  <meta property="og:title" content="${esc(share.title)} · 모아 캘린더">
+  <meta property="og:description" content="${esc(ogDesc)}">
+  <meta property="og:url" content="${esc(ogUrl)}">
+  <meta property="og:image" content="${esc(ogImage)}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="${esc(share.title)} — 모아 캘린더 공유 일정">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${esc(share.title)} · 모아 캘린더">
+  <meta name="twitter:description" content="${esc(ogDesc)}">
+  <meta name="twitter:image" content="${esc(ogImage)}">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     :root {
@@ -377,9 +400,104 @@ export function renderSharedScheduleHtml({ share, events = [], isExpired = false
       color: var(--muted);
     }
     .empty-all .icon { font-size: 36px; margin-bottom: 12px; }
+    .share-actions-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #f0f4ee;
+    }
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      flex: 1 1 180px;
+    }
+    .action-btn.primary {
+      background: var(--green);
+      color: #fff;
+    }
+    .action-btn.secondary {
+      background: #f4f8f2;
+      color: var(--green);
+      border: 1px solid #d5e2d2;
+    }
+    .event-ics-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #466852;
+      text-decoration: none;
+    }
+    .event-ics-link:hover { text-decoration: underline; }
+    .viral-cta-card {
+      margin-top: 28px;
+      background: linear-gradient(135deg, #edf4ea 0%, #f8fbf6 100%);
+      border: 1px solid #d3e1ce;
+      border-radius: 16px;
+      padding: 22px 20px;
+      text-align: center;
+    }
+    .viral-cta-card h2 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      color: #1c3326;
+      letter-spacing: -0.3px;
+    }
+    .viral-cta-card p {
+      margin: 0 0 16px;
+      font-size: 13px;
+      color: #4f6353;
+      line-height: 1.6;
+      word-break: keep-all;
+    }
+    .viral-cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+    .cta-primary-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      background: var(--green);
+      color: #fff;
+      font-size: 13.5px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .cta-secondary-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #cfe0cb;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
     footer.share-footer {
       text-align: center;
-      margin-top: 36px;
+      margin-top: 24px;
       font-size: 12px;
       color: #929e8f;
     }
@@ -404,6 +522,11 @@ export function renderSharedScheduleHtml({ share, events = [], isExpired = false
         <span>공유자: <strong>${esc(share.owner_name || '사용자')}</strong>${share.calendar_name ? ` · ${esc(share.calendar_name)}` : ''}</span>
         <span>총 ${events.length}개의 일정</span>
       </div>
+      ${safeToken && events.length > 0 ? `
+      <div class="share-actions-bar">
+        <a href="${esc(importToMoaUrl)}" class="action-btn primary">✨ 모아 캘린더에 복사하기</a>
+        <a href="${esc(icsDownloadUrl)}" class="action-btn secondary" download="moa-schedule.ics">📥 내 캘린더에 저장 (.ics)</a>
+      </div>` : ''}
     </header>
 
     <main class="events-main">
@@ -435,7 +558,9 @@ export function renderSharedScheduleHtml({ share, events = [], isExpired = false
                     ${ev.is_todo ? `<span class="todo-indicator">${ev.completed ? '✓' : '○'}</span>` : ''}
                     ${esc(ev.title)}
                   </div>
+                  ${ev.location ? `<div class="event-location" style="margin-top:5px;font-size:12px;color:#38664e;font-weight:600">📍 <a href="https://map.naver.com/p/search/${encodeURIComponent(ev.location)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">${esc(ev.location)}</a></div>` : ''}
                   ${ev.notes ? `<div class="event-notes">${esc(ev.notes)}</div>` : ''}
+                  ${safeToken && ev.id ? `<a href="${esc(`${icsDownloadUrl}?event=${encodeURIComponent(ev.id)}`)}" class="event-ics-link" download>이 일정만 저장 (.ics)</a>` : ''}
                 </article>
               `;
             }).join('')}
@@ -444,8 +569,17 @@ export function renderSharedScheduleHtml({ share, events = [], isExpired = false
       }).join('')}
     </main>
 
+    <section class="viral-cta-card" aria-label="모아 캘린더 시작하기">
+      <h2>나도 10초 만에 내 일정 링크 만들기</h2>
+      <p>가족, 연인, 친구와 링크 하나로 실시간 일정을 함께 관리하고 원하는 기간만 깔끔하게 공유해 보세요.</p>
+      <div class="viral-cta-actions">
+        <a href="${esc(trySandboxUrl)}" class="cta-primary-btn">로그인 없이 먼저 체험하기 →</a>
+        <a href="${esc(startLoginUrl)}" class="cta-secondary-link">내 캘린더 시작하기</a>
+      </div>
+    </section>
+
     <footer class="share-footer">
-      <p>실시간으로 함께 쓰는 가벼운 캘린더, <a href="${origin || '/'}" target="_blank" rel="noopener">모아 캘린더 ↗</a></p>
+      <p>실시간으로 함께 쓰는 가벼운 캘린더, <a href="${esc(startLoginUrl)}" target="_blank" rel="noopener">모아 캘린더 ↗</a></p>
     </footer>
   </div>
 </body>

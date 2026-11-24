@@ -6,10 +6,12 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
     private var progressIndicator: NSProgressIndicator!
     private var topDragBar: WindowTopDragBar!
     private var observation: NSKeyValueObservation?
+    private var loadingObservation: NSKeyValueObservation?
+    private var pendingEventToOpen: (id: String, date: String)?
 
     public static let defaultServerURL = "https://dwm.brightnetworks.kr"
     private static let serverURLKey = "MoaCalendarServerURL"
-    private let topDragBarHeight: CGFloat = 15.0 // Dedicated 15px dark green top bar for easy window dragging
+    private let topDragBarHeight: CGFloat = 28.0 // Dedicated 28px dark green title/drag bar aligned with macOS traffic lights
 
     public static var currentServerURL: URL {
         get {
@@ -35,7 +37,12 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
-        window.backgroundColor = NSColor(calibratedRed: 248/255, green: 250/255, blue: 247/255, alpha: 1.0)
+        window.backgroundColor = NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(calibratedRed: 20/255, green: 27/255, blue: 24/255, alpha: 1.0)
+                : NSColor(calibratedRed: 248/255, green: 250/255, blue: 247/255, alpha: 1.0)
+        }
         window.minSize = NSSize(width: 720, height: 520)
         window.setFrameAutosaveName("MoaCalendarMainWindowFrame")
 
@@ -53,6 +60,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
 
     deinit {
         observation?.invalidate()
+        loadingObservation?.invalidate()
     }
 
     private func setupWebView() {
@@ -72,6 +80,90 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
         // Native window drag handler injection
         let contentController = WKUserContentController()
         contentController.add(self, name: "windowDrag")
+        contentController.add(self, name: "moaNotification")
+
+        let bridgeScriptSource = """
+        (function() {
+          window.MoaMacBridge = {
+            isMacApp: true,
+            platform: 'macos',
+            syncEventsData: function(events, calendars) {
+              try {
+                var evStr = typeof events === 'string' ? events : JSON.stringify(events || []);
+                var calStr = typeof calendars === 'string' ? calendars : JSON.stringify(calendars || []);
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.moaNotification) {
+                  window.webkit.messageHandlers.moaNotification.postMessage({
+                    action: 'syncEvents',
+                    events: evStr,
+                    calendars: calStr
+                  });
+                }
+              } catch (e) {
+                console.warn('[MoaMacBridge] syncEventsData error:', e);
+              }
+            },
+            showNotification: function(title, options) {
+              try {
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.moaNotification) {
+                  window.webkit.messageHandlers.moaNotification.postMessage({
+                    action: 'showNotification',
+                    title: String(title || ''),
+                    options: options || {}
+                  });
+                }
+              } catch (e) {
+                console.warn('[MoaMacBridge] showNotification error:', e);
+              }
+            },
+            testNotification: function() {
+              try {
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.moaNotification) {
+                  window.webkit.messageHandlers.moaNotification.postMessage({
+                    action: 'testNotification'
+                  });
+                }
+              } catch (e) {
+                console.warn('[MoaMacBridge] testNotification error:', e);
+              }
+            },
+            requestPermission: function() {
+              try {
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.moaNotification) {
+                  window.webkit.messageHandlers.moaNotification.postMessage({
+                    action: 'requestPermission'
+                  });
+                }
+              } catch (e) {
+                console.warn('[MoaMacBridge] requestPermission error:', e);
+              }
+            }
+          };
+
+          // Web Notification API Bridge / Polyfill
+          try {
+            function MacNotification(title, options) {
+              options = options || {};
+              window.MoaMacBridge.showNotification(title, options);
+              this.title = title;
+              this.body = options.body || '';
+              this.tag = options.tag || '';
+              this.data = options.data || null;
+              this.close = function() {};
+            }
+            MacNotification.permission = 'granted';
+            MacNotification.requestPermission = function(callback) {
+              window.MoaMacBridge.requestPermission();
+              if (typeof callback === 'function') callback('granted');
+              return Promise.resolve('granted');
+            };
+            window.Notification = MacNotification;
+          } catch (e) {
+            console.warn('[MoaMacBridge] Notification bridge setup failed:', e);
+          }
+        })();
+        """
+        let bridgeUserScript = WKUserScript(source: bridgeScriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        contentController.addUserScript(bridgeUserScript)
 
         let dragScriptSource = """
         (function() {
@@ -123,7 +215,12 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
-        webView.underPageBackgroundColor = NSColor(calibratedRed: 248/255, green: 250/255, blue: 247/255, alpha: 1.0)
+        webView.underPageBackgroundColor = NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return isDark
+                ? NSColor(calibratedRed: 20/255, green: 27/255, blue: 24/255, alpha: 1.0)
+                : NSColor(calibratedRed: 248/255, green: 250/255, blue: 247/255, alpha: 1.0)
+        }
 
         contentView.addSubview(webView)
         setupTopDragBar()
@@ -135,6 +232,9 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
         let barFrame = NSRect(x: 0, y: bounds.height - topDragBarHeight, width: bounds.width, height: topDragBarHeight)
         topDragBar = WindowTopDragBar(frame: barFrame)
         topDragBar.autoresizingMask = [.width, .minYMargin]
+        topDragBar.onRefresh = { [weak self] in
+            self?.reloadPage()
+        }
         contentView.addSubview(topDragBar)
     }
 
@@ -166,6 +266,13 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
                 self.progressIndicator.alphaValue = 1.0
             }
         }
+
+        loadingObservation = webView.observe(\.isLoading, options: [.new]) { [weak self] _, change in
+            guard let self = self, let isLoading = change.newValue else { return }
+            DispatchQueue.main.async {
+                self.topDragBar?.setRefreshing(isLoading)
+            }
+        }
     }
 
     public func loadCurrentURL() {
@@ -180,6 +287,52 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
         if message.name == "windowDrag" {
             if let currentEvent = NSApp.currentEvent {
                 self.window?.performDrag(with: currentEvent)
+            }
+        } else if message.name == "moaNotification" {
+            handleNotificationBridgeMessage(message)
+        }
+    }
+
+    private func handleNotificationBridgeMessage(_ message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any],
+              let action = body["action"] as? String else { return }
+
+        switch action {
+        case "syncEvents":
+            let eventsJson = body["events"] as? String ?? "[]"
+            NotificationManager.shared.syncEventsAndScheduleReminders(eventsJson: eventsJson)
+        case "showNotification":
+            let title = body["title"] as? String ?? "모아 캘린더"
+            let options = body["options"] as? [String: Any] ?? [:]
+            let bodyText = options["body"] as? String ?? ""
+            let tag = options["tag"] as? String
+            NotificationManager.shared.sendNotification(
+                title: title,
+                body: bodyText,
+                identifier: tag,
+                userInfo: options
+            )
+        case "testNotification":
+            NotificationManager.shared.sendTestNotification()
+        case "requestPermission":
+            NotificationManager.shared.requestAuthorization(forcePrompt: true)
+        default:
+            break
+        }
+    }
+
+    public func openEvent(id: String, date: String) {
+        let escapedId = id.replacingOccurrences(of: "'", with: "\\'")
+        let escapedDate = date.replacingOccurrences(of: "'", with: "\\'")
+        let script = "if (typeof window.handleMoaWidgetAction === 'function') { window.handleMoaWidgetAction('view_event', '\(escapedDate)', '\(escapedId)'); }"
+
+        if webView.isLoading {
+            pendingEventToOpen = (id: id, date: date)
+        } else {
+            webView.evaluateJavaScript(script) { [weak self] _, error in
+                if error != nil {
+                    self?.pendingEventToOpen = (id: id, date: date)
+                }
             }
         }
     }
@@ -204,7 +357,11 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
     }
 
     public func reloadPage() {
-        webView.reload()
+        if webView.url == nil {
+            loadCurrentURL()
+        } else {
+            webView.reload()
+        }
     }
 
     public func zoomIn() {
@@ -271,7 +428,14 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {}
 
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {}
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let pending = pendingEventToOpen {
+            pendingEventToOpen = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.openEvent(id: pending.id, date: pending.date)
+            }
+        }
+    }
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {}
 
@@ -306,25 +470,126 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate, W
         }
         return nil
     }
+
+    @available(macOS 13.0, *)
+    public func webView(_ webView: WKWebView, requestNotificationPermissionFor securityOrigin: WKSecurityOrigin, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        NotificationManager.shared.requestAuthorization { granted in
+            decisionHandler(granted ? .grant : .deny)
+        }
+    }
 }
 
-// MARK: - Native Top Window Drag Bar (15px dark green bar)
+// MARK: - Native Top Window Drag Bar (28px dark green bar with refresh button)
+
+final class TopBarIconButton: NSButton {
+    private var trackingAreaRef: NSTrackingArea?
+    private var isHovered = false
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        isBordered = false
+        bezelStyle = .regularSquare
+        imagePosition = .imageOnly
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        contentTintColor = NSColor.white.withAlphaComponent(0.9)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingAreaRef {
+            removeTrackingArea(existing)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.16).cgColor
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    override func highlight(_ flag: Bool) {
+        super.highlight(flag)
+        if flag {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.24).cgColor
+        } else {
+            layer?.backgroundColor = isHovered ? NSColor.white.withAlphaComponent(0.16).cgColor : NSColor.clear.cgColor
+        }
+    }
+}
 
 final class WindowTopDragBar: NSView {
     public static let barColor = NSColor(calibratedRed: 42/255, green: 76/255, blue: 58/255, alpha: 1.0) // #2a4c3a: deep brand green
+    public var onRefresh: (() -> Void)?
+    private let refreshButton = TopBarIconButton(frame: .zero)
 
     override var mouseDownCanMoveWindow: Bool { true }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        self.wantsLayer = true
-        self.layer?.backgroundColor = WindowTopDragBar.barColor.cgColor
+        setupView()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        setupView()
+    }
+
+    private func setupView() {
         self.wantsLayer = true
         self.layer?.backgroundColor = WindowTopDragBar.barColor.cgColor
+
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        if let icon = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "페이지 새로고침")?
+            .withSymbolConfiguration(symbolConfig) {
+            refreshButton.image = icon
+        } else {
+            refreshButton.title = "↻"
+        }
+        refreshButton.toolTip = "페이지 새로고침 (⌘R)"
+        refreshButton.setAccessibilityLabel("페이지 새로고침")
+        refreshButton.target = self
+        refreshButton.action = #selector(handleRefreshClick)
+        refreshButton.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(refreshButton)
+        NSLayoutConstraint.activate([
+            refreshButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            refreshButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            refreshButton.widthAnchor.constraint(equalToConstant: 24),
+            refreshButton.heightAnchor.constraint(equalToConstant: 22)
+        ])
+    }
+
+    public func setRefreshing(_ refreshing: Bool) {
+        refreshButton.alphaValue = refreshing ? 0.55 : 1.0
+    }
+
+    @objc private func handleRefreshClick() {
+        onRefresh?()
     }
 
     override func mouseDown(with event: NSEvent) {

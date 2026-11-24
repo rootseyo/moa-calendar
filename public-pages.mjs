@@ -6,6 +6,8 @@ const assets = new Map([
  ['/analytics.js', 'text/javascript; charset=utf-8'],
  ['/translations.js', 'text/javascript; charset=utf-8'],
  ['/app.js', 'text/javascript; charset=utf-8'],
+ ['/sandbox.js', 'text/javascript; charset=utf-8'],
+ ['/quick-add.js', 'text/javascript; charset=utf-8'],
  ['/event-utils.js', 'text/javascript; charset=utf-8'],
  ['/lunar.js', 'text/javascript; charset=utf-8'],
  ['/weather.js', 'text/javascript; charset=utf-8'],
@@ -27,7 +29,7 @@ const escapeHTML = value => value.replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&
 const publicFile = path => readFileSync(new URL(`./public${path}`, import.meta.url));
 
 // Public resources do not depend on a login session or database connection.
-export function servePublicPage(req, res, pathname, appOrigin) {
+export function servePublicPage(req, res, pathname, appOrigin, metaOverride = null) {
  if (!['GET', 'HEAD'].includes(req.method)) return false;
  const origin = new URL(appOrigin).origin;
  const send = (type, content, cache = 'no-store', status = 200) => {
@@ -43,7 +45,7 @@ export function servePublicPage(req, res, pathname, appOrigin) {
  if (pathname === '/terms' || pathname === '/terms/') { res.setHeader('Location', '/terms.html?v=20261013-oauth-v2'); return send('text/plain; charset=utf-8', 'Redirecting', 'no-store', 301); }
  if (assets.has(pathname)) return send(assets.get(pathname), publicFile(pathname), ['/privacy.html','/terms.html','/sw.js'].includes(pathname)?'no-store':'public, max-age=3600');
  if (pathname === '/robots.txt') {
-  return send('text/plain; charset=utf-8', `User-agent: *\nAllow: /$\nAllow: /en/$\nAllow: /ko/$\nAllow: /privacy.html$\nAllow: /terms.html$\nAllow: /locale.js\nAllow: /translations.js\nAllow: /app.en.js\nAllow: /app.js\nAllow: /sw.js\nAllow: /event-utils.js\nAllow: /holidays.js\nAllow: /lunar.js\nAllow: /weather.js\nAllow: /style.css\nAllow: /icons/\nAllow: /favicon\nAllow: /og-image.png\nAllow: /manifest.webmanifest\nDisallow: /\n\nSitemap: ${origin}/sitemap.xml\n`, 'public, max-age=3600');
+  return send('text/plain; charset=utf-8', `User-agent: *\nAllow: /$\nAllow: /en/$\nAllow: /ko/$\nAllow: /privacy.html$\nAllow: /terms.html$\nAllow: /locale.js\nAllow: /translations.js\nAllow: /app.en.js\nAllow: /app.js\nAllow: /sandbox.js\nAllow: /quick-add.js\nAllow: /sw.js\nAllow: /event-utils.js\nAllow: /holidays.js\nAllow: /lunar.js\nAllow: /weather.js\nAllow: /style.css\nAllow: /icons/\nAllow: /favicon\nAllow: /og-image.png\nAllow: /manifest.webmanifest\nDisallow: /\n\nSitemap: ${origin}/sitemap.xml\n`, 'public, max-age=3600');
  }
  if (pathname === '/sitemap.xml') {
   const languageLinks=`<xhtml:link rel="alternate" hreflang="ko" href="${escapeHTML(origin)}/ko/"/><xhtml:link rel="alternate" hreflang="en" href="${escapeHTML(origin)}/en/"/><xhtml:link rel="alternate" hreflang="x-default" href="${escapeHTML(origin)}/"/>`;
@@ -66,8 +68,25 @@ export function servePublicPage(req, res, pathname, appOrigin) {
   // Keep the installed app name consistent with the existing Android shortcut.
   template=template.replace('name="application-name" content="Moa Calendar"','name="application-name" content="모아 캘린더"').replace('name="apple-mobile-web-app-title" content="Moa Calendar"','name="apple-mobile-web-app-title" content="모아 캘린더"');
  }
+ if (metaOverride) {
+  if (metaOverride.title) {
+   const safeTitle = escapeHTML(metaOverride.title);
+   template = template
+    .replace(/<title>[^<]*<\/title>/, `<title>${safeTitle}</title>`)
+    .replace(/(<meta property="og:title" content=")[^"]*(">)/, `$1${safeTitle}$2`)
+    .replace(/(<meta name="twitter:title" content=")[^"]*(">)/, `$1${safeTitle}$2`);
+  }
+  if (metaOverride.description) {
+   const safeDesc = escapeHTML(metaOverride.description);
+   template = template
+    .replace(/(<meta name="description" content=")[^"]*(">)/, `$1${safeDesc}$2`)
+    .replace(/(<meta property="og:description" content=")[^"]*(">)/, `$1${safeDesc}$2`)
+    .replace(/(<meta name="twitter:description" content=")[^"]*(">)/, `$1${safeDesc}$2`);
+  }
+ }
+ const pageUrl = metaOverride?.pageUrl || (origin + (isHome ? pathname : '/'));
  const html = template
-  .replaceAll('__PAGE_URL__',escapeHTML(origin+(isHome?pathname:'/')))
+  .replaceAll('__PAGE_URL__', escapeHTML(pageUrl))
   .replaceAll('__SITE_URL__', escapeHTML(origin))
   .replaceAll('__ROBOTS__', robots);
  return send('text/html; charset=utf-8', html);

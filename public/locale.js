@@ -1,5 +1,37 @@
 import { translateSource, translateError } from './translations.js?v=20261028-instant-calendar-v1';
 
+// Apply saved color-scheme preference immediately before first paint (CSP-safe, no inline script).
+export function applyColorScheme(value){
+ const meta=document.querySelector('meta[name="color-scheme"]');
+ const content=value==='dark'||value==='light'?value:'light dark';
+ if(meta)meta.setAttribute('content',content);
+ const themeMeta=document.querySelector('meta[name="theme-color"]');
+ if(themeMeta){
+  const isDark=content==='dark'||(content==='light dark'&&window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  themeMeta.setAttribute('content',isDark?'#1a2420':'#38664e');
+ }
+}
+export function getColorSchemePreference(){
+ try{
+  const saved=localStorage.getItem('color-scheme');
+  return saved==='dark'||saved==='light'?saved:'system';
+ }catch{return 'system';}
+}
+export function setColorSchemePreference(mode){
+ try{
+  if(mode==='dark'||mode==='light')localStorage.setItem('color-scheme',mode);
+  else localStorage.removeItem('color-scheme');
+ }catch{}
+ applyColorScheme(mode==='dark'||mode==='light'?mode:'light dark');
+}
+applyColorScheme(getColorSchemePreference()==='system'?'light dark':getColorSchemePreference());
+window.addEventListener('storage',e=>{
+ if(e.key==='color-scheme')applyColorScheme(e.newValue||'light dark');
+});
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{
+ if(getColorSchemePreference()==='system')applyColorScheme('light dark');
+});
+
 const publicEnglish=/^\/en\/?$/.test(location.pathname);
 const publicKorean=/^\/ko\/?$/.test(location.pathname);
 const publicLocale=publicEnglish?'en':publicKorean?'ko':null;

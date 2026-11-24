@@ -37,7 +37,9 @@ swiftc -O \
   -target "${TARGET_ARCH}" \
   -framework Cocoa \
   -framework WebKit \
+  -framework UserNotifications \
   "${MACOS_DIR}/Sources/CalendarIconRenderer.swift" \
+  "${MACOS_DIR}/Sources/NotificationManager.swift" \
   "${MACOS_DIR}/Sources/MainWindowController.swift" \
   "${MACOS_DIR}/Sources/AppMenu.swift" \
   "${MACOS_DIR}/Sources/AppDelegate.swift" \

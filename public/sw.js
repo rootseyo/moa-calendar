@@ -1,11 +1,93 @@
-// Moa Calendar Service Worker for Web Push Notifications
+// Moa Calendar Service Worker: Web Push Notifications + Offline Read PWA Cache
+
+const STATIC_CACHE = 'moa-static-v2';
+const API_CACHE = 'moa-api-v1';
+const PRECACHE_URLS = [
+  '/',
+  '/manifest.webmanifest',
+  '/favicon.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+];
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then(cache => cache.addAll(PRECACHE_URLS).catch(() => {})).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(key => key !== STATIC_CACHE && key !== API_CACHE)
+          .map(key => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
+  );
+});
+
+function isCacheableStaticPath(pathname) {
+  return (
+    pathname === '/' ||
+    pathname === '/en/' ||
+    pathname === '/ko/' ||
+    pathname === '/manifest.webmanifest' ||
+    pathname.startsWith('/icons/') ||
+    /\.(?:css|js|svg|png|ico)$/i.test(pathname)
+  );
+}
+
+function isCacheableReadApi(pathname) {
+  return (
+    pathname === '/api/calendars' ||
+    /^\/api\/calendars\/[^/]+\/(?:events|monthly-items|notes|month-notes)$/.test(pathname) ||
+    pathname === '/api/weather'
+  );
+}
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/stream') || url.pathname.startsWith('/auth/')) return;
+
+  // 1. Read-only calendar/event/weather APIs: Network-First with Offline Cache Fallback
+  if (isCacheableReadApi(url.pathname)) {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(API_CACHE).then(cache => cache.put(req, clone)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(req).then(cached => cached || new Response(JSON.stringify({ error: '오프라인 상태입니다.' }), { status: 503, headers: { 'Content-Type': 'application/json; charset=utf-8' } })))
+    );
+    return;
+  }
+
+  // 2. Static assets: Stale-While-Revalidate
+  if (isCacheableStaticPath(url.pathname)) {
+    event.respondWith(
+      caches.match(req).then(cached => {
+        const networkPromise = fetch(req)
+          .then(res => {
+            if (res.ok) {
+              const clone = res.clone();
+              caches.open(STATIC_CACHE).then(cache => cache.put(req, clone)).catch(() => {});
+            }
+            return res;
+          })
+          .catch(() => cached);
+        return cached || networkPromise;
+      })
+    );
+  }
 });
 
 self.addEventListener('push', event => {

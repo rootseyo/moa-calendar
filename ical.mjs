@@ -298,6 +298,7 @@ export function formatIcsEvent({
   end,
   allDay = false,
   notes = '',
+  location = '',
   sequence = 0,
   dtstamp,
 }) {
@@ -307,6 +308,7 @@ export function formatIcsEvent({
   const cleanUid = uid || `moa-${Date.now()}-${Math.random().toString(36).slice(2)}@${domain}`;
   const cleanTitle = escapeIcsText(title || '(제목 없음)');
   const cleanNotes = escapeIcsText(notes || '');
+  const cleanLocation = escapeIcsText(location || '');
 
   const lines = [
     'BEGIN:VCALENDAR',
@@ -321,6 +323,9 @@ export function formatIcsEvent({
     `SUMMARY:${cleanTitle}`,
   ];
 
+  if (cleanLocation) {
+    lines.push(`LOCATION:${cleanLocation}`);
+  }
   if (cleanNotes) {
     lines.push(`DESCRIPTION:${cleanNotes}`);
   }
@@ -348,5 +353,67 @@ export function formatIcsEvent({
   lines.push('END:VEVENT');
   lines.push('END:VCALENDAR');
 
+  return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+}
+
+// Format multiple events into a single RFC 5545 VCALENDAR string (e.g. for shared schedule export)
+export function formatIcsCalendar({ name = '모아 캘린더', events = [], dtstamp } = {}) {
+  const stamp = dtstamp || new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  let domain = 'moa-calendar.local';
+  try { if (process.env.APP_URL) domain = new URL(process.env.APP_URL).hostname || domain; } catch {}
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Moa Calendar//DWM//KO',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escapeIcsText(name || '모아 캘린더')}`,
+    'X-WR-TIMEZONE:Asia/Seoul',
+  ];
+
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    if (!ev || !ev.start || !ev.end) continue;
+    const cleanUid = ev.uid || ev.id ? `${String(ev.uid || ev.id).replace(/[^a-zA-Z0-9._@-]/g, '')}@${domain}` : `moa-${Date.now()}-${i}@${domain}`;
+    const cleanTitle = escapeIcsText(ev.title || '(제목 없음)');
+    const cleanNotes = escapeIcsText(ev.notes || '');
+    const cleanLocation = escapeIcsText(ev.location || '');
+    const allDay = Boolean(ev.all_day ?? ev.allDay);
+
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${cleanUid}`);
+    lines.push(`DTSTAMP:${stamp}`);
+    lines.push(`SEQUENCE:${Number(ev.sequence || 0)}`);
+    lines.push('STATUS:CONFIRMED');
+    lines.push(`SUMMARY:${cleanTitle}`);
+    if (cleanLocation) lines.push(`LOCATION:${cleanLocation}`);
+    if (cleanNotes) lines.push(`DESCRIPTION:${cleanNotes}`);
+    if (ev.category) lines.push(`CATEGORIES:${escapeIcsText(ev.category)}`);
+
+    if (allDay) {
+      const sDate = String(ev.start).slice(0, 10).replace(/-/g, '');
+      let eDate = String(ev.end).slice(0, 10).replace(/-/g, '');
+      if (eDate <= sDate) {
+        eDate = shiftDayString(String(ev.start).slice(0, 10), 1).replace(/-/g, '');
+      }
+      lines.push(`DTSTART;VALUE=DATE:${sDate}`);
+      lines.push(`DTEND;VALUE=DATE:${eDate}`);
+    } else {
+      const startStr = String(ev.start).slice(0, 16);
+      const endStr = String(ev.end).slice(0, 16);
+      const startMs = Date.parse(`${startStr}:00+09:00`);
+      const endMs = Date.parse(`${endStr}:00+09:00`);
+      if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+        const startUtc = new Date(startMs).toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        const endUtc = new Date(endMs).toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        lines.push(`DTSTART:${startUtc}`);
+        lines.push(`DTEND:${endUtc}`);
+      }
+    }
+    lines.push('END:VEVENT');
+  }
+
+  lines.push('END:VCALENDAR');
   return lines.map(foldIcsLine).join('\r\n') + '\r\n';
 }

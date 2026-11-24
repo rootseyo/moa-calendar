@@ -1,9 +1,11 @@
-import { locale, translateMessage, languageControl } from './locale.js?v=20261102-time-range-v1';
+import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261102-time-range-v1';
 import { english } from './translations.js?v=20261028-instant-calendar-v1';
 import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261028-instant-calendar-v1';
 import { getHoliday, getActiveRegion, getRegionName } from './holidays.js?v=20261028-instant-calendar-v1';
 import { formatKoreanLunarDate, getKoreanLunarDate } from './lunar.js?v=20261028-instant-calendar-v1';
 import { WEATHER_PRESET_LOCATIONS, parseOpenMeteoDaily, renderWeatherBadgeHtml, renderHourlyWeatherItemsHtml, getSavedWeatherLocation, saveWeatherLocation, isWeatherEnabled, setWeatherEnabled, getWeatherLocationDisplayName, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl } from './weather.js?v=20261028-cancel-v1';
+import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261123-phase1-v1';
+import { parseQuickAddInput, buildMapUrls } from './quick-add.js?v=20261124-phase2-v1';
 const $ = s=>document.querySelector(s);
 const app=$('#app');
 const mobileCalendar=window.matchMedia('(max-width:600px)');
@@ -12,6 +14,39 @@ mobileCalendar.addEventListener('change',()=>{
 });
 let deletingCalendarId=null;
 let me={providers:{kakao:true,google:true}}, calendars=[], current, events=[], connection, sessions=[], connected=false, editing=null;
+let sandboxMode=false, sandboxStore=null;
+function trackFunnel(eventName,meta){
+ try{window.MoaAnalytics?.track(eventName,meta);}catch{}
+}
+function isKakaoInApp(){
+ try{return /KAKAOTALK/i.test(navigator.userAgent||'');}catch{return false;}
+}
+function hasNativeShare(){
+ return typeof navigator!=='undefined'&&typeof navigator.share==='function';
+}
+async function shareLink({title,text,url,fallbackInput,copiedToast='링크를 복사했어요.'}){
+ if(!url)return;
+ if(hasNativeShare()){
+  try{
+   await navigator.share({title:title||'모아 캘린더',text:text||'',url});
+   toast(tr('링크를 공유했어요.'));
+   return;
+  }catch(err){
+   if(err?.name==='AbortError')return;
+  }
+ }
+ try{
+  await navigator.clipboard.writeText(url);
+  toast(tr(copiedToast));
+ }catch{
+  fallbackInput?.select?.();
+  toast(tr('링크를 선택했어요. 직접 복사해 주세요.'));
+ }
+}
+function syncNativeShareButtons(){
+ const supported=hasNativeShare();
+ document.querySelectorAll('.native-share-btn').forEach(btn=>{btn.hidden=!supported;});
+}
 let monthlyItems=[], monthlyLoadError=false, monthlyLoading=true, eventLoadRequest=0;
 let editingMonthlyItem=null, monthlySaving=false;
 const monthlyChecking=new Set();
@@ -19,6 +54,7 @@ let monthlyCollapsed=true;
 
 let month=new Date(new Date().getFullYear(),new Date().getMonth(),1), selected=dateKey(new Date());
 let viewMode='month'; // 'day' | 'week' | 'month'
+let showFreeSlots=false;
 let selectedCalendarIds=new Set();
 let userCalendarColors={};
 let activeColorPickerCalId=null;
@@ -71,10 +107,140 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const tr=s=>locale==='en'?(english[s]||s):s;
 
 async function api(path,method='GET',data){
+ if(sandboxMode&&sandboxStore){
+  const local=sandboxStore.handleApi(path,method,data);
+  if(local!==null)return local;
+  throw Object.assign(new Error(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!')),{status:403});
+ }
  const r=await fetch(path,{method,headers:method==='GET'?{}:{'Content-Type':'application/json'},...(data?{body:JSON.stringify(data)}:{})});
  const b=await r.json();
  if(!r.ok){if(r.status===401&&!path.startsWith('/auth/email/')){connection?.close();location.reload();}throw Object.assign(new Error(translateMessage(b.error||'요청에 실패했습니다.')),{status:r.status});}
  return b;
+}
+
+function enterSandboxMode(source='login'){
+ sandboxMode=true;
+ sandboxStore=createSandboxStore(typeof localStorage!=='undefined'?localStorage:null,new Date(),locale);
+ const demoCal=createSandboxCalendar(locale);
+ calendars=[demoCal];
+ current=demoCal;
+ selectedCalendarIds=new Set([demoCal.id]);
+ me={...me,user:null,sandbox:true};
+ trackFunnel('sandbox_start',{source});
+ renderShell();
+ renderCalendar();
+ loadWeatherForecast();
+ selectCalendar(demoCal.id,false);
+}
+
+function exitSandboxToLogin(){
+ sandboxMode=false;
+ sandboxStore=null;
+ calendars=[];
+ current=null;
+ events=[];
+ monthlyItems=[];
+ if(location.search.includes('try=')){
+  const u=new URL(location.href);
+  u.searchParams.delete('try');
+  history.replaceState({},'',u.pathname+(u.search?u.search:''));
+ }
+ renderLogin();
+}
+
+async function migrateSandboxEventsIfAny(){
+ try{
+  const store=createSandboxStore(localStorage,new Date(),locale);
+  const userEvents=store.getUserCreatedEvents();
+  if(!userEvents.length)return 0;
+  const target=defaultCalendar();
+  if(!target)return 0;
+  let migrated=0;
+  for(const ev of userEvents){
+   try{
+    await api(`/api/calendars/${target.id}/events`,'POST',{
+     title:ev.title,
+     start:ev.start,
+     end:ev.end,
+     all_day:Boolean(ev.all_day),
+     color:ev.color||'sage',
+     category:ev.category||'',
+     notes:ev.notes||'',
+     is_todo:Boolean(ev.is_todo),
+     completed:Boolean(ev.completed),
+     is_dday:Boolean(ev.is_dday),
+     is_cancelled:Boolean(ev.is_cancelled),
+     reminder_enabled:Boolean(ev.reminder_enabled),
+     reminder_minutes:Number(ev.reminder_minutes||10)
+    });
+    migrated++;
+   }catch{}
+  }
+  store.clear();
+  return migrated;
+ }catch{return 0;}
+}
+
+async function importPendingSharedScheduleIfAny(){
+ let pendingToken='';
+ try{pendingToken=sessionStorage.getItem('moa_pending_import_share')||'';}catch{}
+ if(!pendingToken)return null;
+ try{sessionStorage.removeItem('moa_pending_import_share');}catch{}
+ try{
+  const result=await api(`/api/schedule-shares/${encodeURIComponent(pendingToken)}/import`,'POST',{});
+  trackFunnel('share_import_completed',{source:'share_page'});
+  return result;
+ }catch(e){
+  toast(e.message);
+  return null;
+ }
+}
+
+const ONBOARDING_TEMPLATES=[
+ {id:'couple',emoji:'💛',label:'커플 캘린더',name:'우리 둘의 캘린더',color:'rose'},
+ {id:'family',emoji:'🏡',label:'가족 캘린더',name:'우리 가족 캘린더',color:'sage'},
+ {id:'study',emoji:'📚',label:'스터디 · 모임',name:'스터디 · 모임 캘린더',color:'blue'}
+];
+function shouldShowOnboardingTemplates(){
+ if(sandboxMode||!me?.user)return false;
+ if(calendars.length>1)return false;
+ try{if(localStorage.getItem('moa_onboarding_dismissed')==='1')return false;}catch{}
+ return true;
+}
+function renderOnboardingTemplatesHtml(){
+ if(!shouldShowOnboardingTemplates())return '';
+ return `<div class="onboarding-templates" id="onboarding-templates" role="region" aria-label="${tr('누구와 함께 쓰는 캘린더인가요?')}"><span class="onboarding-templates-head">${tr('누구와 함께 쓰는 캘린더인가요?')}</span><div class="onboarding-template-chips">${ONBOARDING_TEMPLATES.map(tpl=>`<button type="button" class="onboarding-template-chip" data-onboarding-template="${tpl.id}"><span aria-hidden="true">${tpl.emoji}</span>${tr(tpl.label)}</button>`).join('')}</div><button type="button" class="onboarding-dismiss-btn" id="onboarding-dismiss-btn" aria-label="${tr('온보딩 닫기')}">✕</button></div>`;
+}
+function attachOnboardingTemplateHandlers(){
+ const box=$('#onboarding-templates');
+ if(!box)return;
+ $('#onboarding-dismiss-btn')?.addEventListener('click',()=>{
+  try{localStorage.setItem('moa_onboarding_dismissed','1');}catch{}
+  box.remove();
+ });
+ box.querySelectorAll('[data-onboarding-template]').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+   const tpl=ONBOARDING_TEMPLATES.find(t=>t.id===btn.dataset.onboardingTemplate);
+   if(!tpl)return;
+   btn.disabled=true;
+   try{
+    const created=await api('/api/calendars','POST',{name:tr(tpl.name)});
+    await api(`/api/calendars/${created.id}/settings`,'PUT',{name:tr(tpl.name),color:tpl.color}).catch(()=>{});
+    try{localStorage.setItem('moa_onboarding_dismissed','1');}catch{}
+    trackFunnel('template_calendar_created',{source:tpl.id});
+    calendars=await api('/api/calendars');
+    await selectCalendar(created.slug||created.id);
+    if($('#calendar-url'))$('#calendar-url').value=`${location.origin}/${created.slug||created.id}`;
+    $('#invite-result').hidden=true;
+    $('#share-dialog .form-error').textContent='';
+    syncNativeShareButtons();
+    $('#share-dialog').showModal();
+   }catch(err){
+    toast(err.message);
+    btn.disabled=false;
+   }
+  });
+ });
 }
 
 let toastTimer;
@@ -95,6 +261,28 @@ async function boot(){
   }
   me=await api('/api/me');
   const urlParams=new URLSearchParams(location.search);
+  const refSource=urlParams.get('ref');
+  if(refSource==='share'){
+   try{
+    if(!sessionStorage.getItem('moa_share_cta_tracked')){
+     sessionStorage.setItem('moa_share_cta_tracked','1');
+     trackFunnel('share_cta_clicked',{source:'share'});
+    }
+   }catch{trackFunnel('share_cta_clicked',{source:'share'});}
+  }
+  const importShareToken=urlParams.get('import_share');
+  if(importShareToken&&/^[a-zA-Z0-9_-]+$/.test(importShareToken)){
+   try{sessionStorage.setItem('moa_pending_import_share',importShareToken);}catch{}
+   urlParams.delete('import_share');
+   const clean=location.pathname+(urlParams.toString()?`?${urlParams.toString()}`:'');
+   history.replaceState({},'',clean);
+  }
+  if(urlParams.get('welcome')==='1'){
+   trackFunnel('signup_complete',{source:'oauth'});
+   urlParams.delete('welcome');
+   const clean=location.pathname+(urlParams.toString()?`?${urlParams.toString()}`:'');
+   history.replaceState({},'',clean);
+  }
   const loginErr=urlParams.get('error');
   let loginErrMsg='';
   if(loginErr){
@@ -114,18 +302,30 @@ async function boot(){
   if(!me.user){
    try{localStorage.removeItem('moa_cached_me');localStorage.removeItem('moa_cached_calendars');}catch{}
    closeSettingsPage();
+   if(urlParams.get('try')==='1'&&!location.pathname.startsWith('/invite/')){
+    return enterSandboxMode(refSource||'url');
+   }
    return renderLogin(loginErrMsg);
   }
+  sandboxMode=false;
+  sandboxStore=null;
   try{localStorage.setItem('moa_cached_me',JSON.stringify(me));}catch{}
   if(location.pathname.startsWith('/invite/')){
    try{
     const result=await api(`/api/invite/${location.pathname.split('/')[2]}`,'POST',{});
     sessionStorage.setItem('calendar',result.id);
     history.replaceState({},'','/');
+    trackFunnel('invite_accepted',{source:'invite_link'});
     toast('캘린더에 참여했어요.');
    }catch(e){renderLogin(e.message,true);return;}
   }
   calendars=await api('/api/calendars');
+  const migratedCount=await migrateSandboxEventsIfAny();
+  const importedShare=await importPendingSharedScheduleIfAny();
+  if(importedShare?.calendarId){
+   calendars=await api('/api/calendars');
+   sessionStorage.setItem('calendar',importedShare.calendarId);
+  }
   try{localStorage.setItem('moa_cached_calendars',JSON.stringify(calendars));}catch{}
   loadUserCalendarPreferences();
   if(urlParams.get('linked')){
@@ -146,7 +346,11 @@ async function boot(){
   if(current)selectCalendar(current.slug||current.id,false);
   handleWidgetUrlParams();
   if(isSettingsRoute())restoreSettingsRoute();
-  if(loginErrMsg)toast(translateMessage(loginErrMsg));
+  if(migratedCount>0)toast(tr('체험 중 만든 일정을 내 캘린더로 옮겼어요!'));
+  else if(importedShare){
+   toast(importedShare.importedCount>0?tr('공유 일정을 내 캘린더에 복사했어요!'):tr('이미 모두 등록된 일정이에요.'));
+  }
+  else if(loginErrMsg)toast(translateMessage(loginErrMsg));
  }catch(e){
   if(!$('#workspace-root')){
    app.innerHTML=`<main class="fatal"><h1>연결을 확인해 주세요</h1><p>${esc(e.message)}</p><button id="retry" class="primary">다시 시도</button></main>`;
@@ -161,14 +365,93 @@ function renderLogin(error='',signedIn=false){
  const currentUrl=encodeURIComponent(location.pathname+location.search);
  const kakaoBtn=me.providers.kakao?`<a class="social kakao" href="/auth/kakao?next=${currentUrl}"><b>●</b> 카카오로 시작하기</a>`:`<a class="social kakao unavailable" aria-disabled="true"><b>●</b> 카카오로 시작하기</a>`;
  const googleBtn=me.providers.google?`<a class="social google" href="/auth/google?next=${currentUrl}"><b>G</b> Google로 시작하기</a>`:`<a class="social google unavailable" aria-disabled="true"><b>G</b> Google로 시작하기</a>`;
- app.innerHTML=`<main class="login"><section class="login-story"><a class="brand" href="/"><span class="brand-mark">m</span>모아<span class="brand-sub">moa calendar</span></a><div class="story-copy"><span class="eyebrow">A LITTLE MORE TOGETHER</span><h1>각자의 하루를,<br>우리의 시간으로.</h1><p>함께할 시간을 모으는 가장 쉬운 방법.<br>링크 하나로 초대하고, 같은 캘린더에서 만나요.</p><div class="story-tags"><span>↗ ${tr('링크로 간편 초대')}</span><span>◉ ${tr('실시간 일정 공유')}</span><span>🌤 ${tr('날씨 확인')}</span><span>🚩 ${tr('D-Day 디데이')}</span></div></div><div class="illustration" aria-hidden="true"><div class="paper"><div class="paper-top">OUR DAYS <span>함께하는 10월 ⛅ 19°</span></div><div class="paper-grid">${Array.from({length:21},(_,i)=>`<span>${i+1}</span>`).join('')}</div><div class="paper-event coral paper-dday">제주 여행 <span>D-5</span></div><div class="paper-event sage">함께하는 저녁 <span>19:00</span></div><div class="paper-event peach">주말 나들이 <span>10:00</span></div></div><div class="float-note">● 함께 보고 있어요</div></div><p class="story-footer">작은 약속부터, 함께 만드는 일상까지.</p></section><section class="login-panel"><div class="login-box"><span class="eyebrow">WELCOME TO MOA</span><h2>${signedIn?'초대를 확인해 주세요':location.pathname.startsWith('/invite/')?'함께할 시간에 초대받았어요':'반가워요, 모아입니다'}</h2><p class="muted">${signedIn?'초대한 사람에게 새로운 링크를 요청해 주세요.':'이메일 또는 소셜 계정으로 로그인하고, 함께할 캘린더를 시작하세요.'}</p>${error?`<p class="form-error">${esc(error)}</p>`:''}${signedIn?'<a class="primary full" href="/">내 캘린더로 이동</a>':`<div class="social-login-group">${googleBtn}${kakaoBtn}</div><div class="auth-divider"><span>${tr('또는 이메일로')}</span></div><div class="email-auth"><div class="auth-mode-tabs" role="tablist"><button type="button" class="auth-mode active" data-auth-mode="login" role="tab" aria-selected="true">${tr('로그인')}</button><button type="button" class="auth-mode" data-auth-mode="register" role="tab" aria-selected="false">${tr('회원가입')}</button></div><form id="email-auth-form"><label id="auth-name-wrap" hidden>${tr('이름')}<input id="auth-name" name="name" maxlength="100" autocomplete="name" placeholder="${tr('이름')}"></label><label>${tr('이메일 주소')}<input id="auth-email" name="email" type="email" maxlength="254" autocomplete="email" required placeholder="name@example.com"></label><label>${tr('비밀번호')}<input id="auth-password" name="password" type="password" minlength="1" maxlength="128" autocomplete="current-password" required placeholder="${tr('비밀번호')}" aria-describedby="auth-password-help"></label><label id="auth-confirm-wrap" hidden>${tr("비밀번호 확인")}<input id="auth-confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="${tr("비밀번호 확인")}"></label><label id="auth-terms-wrap" class="auth-terms" hidden><input id="auth-terms" type="checkbox"><span>${tr("서비스 이용약관에 동의합니다.")} <a href="/terms.html" target="_blank" rel="noopener">${tr("서비스 이용약관")}</a> · <a href="/privacy.html" target="_blank" rel="noopener">${tr("개인정보 처리방침")}</a></span></label><small id="auth-password-help" class="auth-help">${tr('비밀번호를 입력해 주세요.')}</small><p id="auth-error" class="form-error" role="alert"></p><button id="email-auth-submit" class="primary full" type="submit">${tr('로그인')}</button></form></div>${me.demo?'<div class="demo-section"><span>개발용 체험</span><form id="demo-form"><label class="sr-only" for="demo-name">체험 이름</label><input id="demo-name" maxlength="30" placeholder="체험할 이름" required><button class="secondary" type="submit">둘러보기 →</button></form><small>개발 환경에서만 제공되는 테스트 로그인입니다.</small></div>':''}`}</div><div class="login-bottom"><div class="login-legal-links"><a href="/privacy.html?v=20261014-email-auth-v1" target="_blank">개인정보 처리방침</a><span>·</span><a href="/terms.html?v=20261014-todo-v2" target="_blank">서비스 이용약관</a></div><span>나의 일정도, 우리의 약속도. 모아.</span></div></section></main>`;
+ const kakaoNotice=isKakaoInApp()?`<div class="inapp-browser-notice" role="note"><strong>${tr('카카오톡 내부 브라우저 안내')}</strong>${tr('카카오톡 내부 브라우저에서는 Google 로그인이 제한될 수 있어요. 카카오로 시작하기를 이용하거나 외부 브라우저로 열어주세요.')}<div><a href="kakaotalk://web/openExternal?url=${encodeURIComponent(location.href)}">${tr('외부 브라우저로 열기 ↗')}</a></div></div>`:'';
+ const sandboxCta=!signedIn&&!location.pathname.startsWith('/invite/')?`<div class="sandbox-try-wrap"><button type="button" id="start-sandbox-btn" class="sandbox-try-btn">${tr('✨ 로그인 없이 먼저 둘러보기')}</button></div>`:'';
+ app.innerHTML=`<main class="login"><section class="login-story"><a class="brand" href="/"><span class="brand-mark">m</span>모아<span class="brand-sub">moa calendar</span></a><div class="story-copy"><span class="eyebrow">A LITTLE MORE TOGETHER</span><h1>각자의 하루를,<br>우리의 시간으로.</h1><p>함께할 시간을 모으는 가장 쉬운 방법.<br>링크 하나로 초대하고, 같은 캘린더에서 만나요.</p><div class="story-tags"><span>↗ ${tr('링크로 간편 초대')}</span><span>◉ ${tr('실시간 일정 공유')}</span><span>🌤 ${tr('날씨 확인')}</span><span>🚩 ${tr('D-Day 디데이')}</span></div></div><div class="illustration" aria-hidden="true"><div class="paper"><div class="paper-top">OUR DAYS <span>함께하는 10월 ⛅ 19°</span></div><div class="paper-grid">${Array.from({length:21},(_,i)=>`<span>${i+1}</span>`).join('')}</div><div class="paper-event coral paper-dday">제주 여행 <span>D-5</span></div><div class="paper-event sage">함께하는 저녁 <span>19:00</span></div><div class="paper-event peach">주말 나들이 <span>10:00</span></div></div><div class="float-note">● 함께 보고 있어요</div></div><p class="story-footer">작은 약속부터, 함께 만드는 일상까지.</p></section><section class="login-panel"><div class="login-box"><span class="eyebrow">WELCOME TO MOA</span><h2>${signedIn?'초대를 확인해 주세요':location.pathname.startsWith('/invite/')?'함께할 시간에 초대받았어요':'반가워요, 모아입니다'}</h2><p class="muted">${signedIn?'초대한 사람에게 새로운 링크를 요청해 주세요.':'이메일 또는 소셜 계정으로 로그인하고, 함께할 캘린더를 시작하세요.'}</p>${error?`<p class="form-error">${esc(error)}</p>`:''}${signedIn?'<a class="primary full" href="/">내 캘린더로 이동</a>':`${kakaoNotice}<div class="social-login-group">${isKakaoInApp()?kakaoBtn+googleBtn:googleBtn+kakaoBtn}</div>${sandboxCta}<div class="auth-divider"><span>${tr('또는 이메일로')}</span></div><div class="email-auth"><div class="auth-mode-tabs" role="tablist"><button type="button" class="auth-mode active" data-auth-mode="login" role="tab" aria-selected="true">${tr('로그인')}</button><button type="button" class="auth-mode" data-auth-mode="register" role="tab" aria-selected="false">${tr('회원가입')}</button></div><form id="email-auth-form"><label id="auth-name-wrap" hidden>${tr('이름')}<input id="auth-name" name="name" maxlength="100" autocomplete="name" placeholder="${tr('이름')}"></label><label>${tr('이메일 주소')}<input id="auth-email" name="email" type="email" maxlength="254" autocomplete="email" required placeholder="name@example.com"></label><label>${tr('비밀번호')}<input id="auth-password" name="password" type="password" minlength="1" maxlength="128" autocomplete="current-password" required placeholder="${tr('비밀번호')}" aria-describedby="auth-password-help"></label><label id="auth-confirm-wrap" hidden>${tr("비밀번호 확인")}<input id="auth-confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="${tr("비밀번호 확인")}"></label><label id="auth-terms-wrap" class="auth-terms" hidden><input id="auth-terms" type="checkbox"><span>${tr("서비스 이용약관에 동의합니다.")} <a href="/terms.html" target="_blank" rel="noopener">${tr("서비스 이용약관")}</a> · <a href="/privacy.html" target="_blank" rel="noopener">${tr("개인정보 처리방침")}</a></span></label><small id="auth-password-help" class="auth-help">${tr('비밀번호를 입력해 주세요.')}</small><p id="auth-error" class="form-error" role="alert"></p><button id="email-auth-submit" class="primary full" type="submit">${tr('로그인')}</button></form></div>${me.demo?'<div class="demo-section"><span>개발용 체험</span><form id="demo-form"><label class="sr-only" for="demo-name">체험 이름</label><input id="demo-name" maxlength="30" placeholder="체험할 이름" required><button class="secondary" type="submit">둘러보기 →</button></form><small>개발 환경에서만 제공되는 테스트 로그인입니다.</small></div>':''}`}</div><div class="login-bottom"><div class="login-legal-links"><a href="/privacy.html?v=20261014-email-auth-v1" target="_blank">개인정보 처리방침</a><span>·</span><a href="/terms.html?v=20261014-todo-v2" target="_blank">서비스 이용약관</a></div><span>나의 일정도, 우리의 약속도. 모아.</span></div></section></main>`;
+ const resetToken=new URLSearchParams(location.search).get('reset_token')||'';
  const authForm=$('#email-auth-form');
  if(authForm){
-  let mode='login';
-  const setMode=next=>{mode=next;const registering=mode==='register';$('#auth-name-wrap').hidden=!registering;$('#auth-name').required=registering;$('#auth-terms-wrap').hidden=!registering;$('#auth-terms').required=registering;$('#auth-confirm-wrap').hidden=!registering;$('#auth-confirm').required=registering;$('#auth-password').minLength=registering?12:1;$('#auth-password').autocomplete=registering?'new-password':'current-password';$('#auth-password-help').textContent=tr(registering?'비밀번호는 12자 이상이어야 합니다.':'비밀번호를 입력해 주세요.');$('#email-auth-submit').textContent=tr(registering?'회원가입':'로그인');document.querySelectorAll('[data-auth-mode]').forEach(button=>{const active=button.dataset.authMode===mode;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});$('#auth-error').textContent='';};
+  let mode=resetToken?'reset':'login';
+  const forgotWrap=document.createElement('div');
+  forgotWrap.className='auth-forgot-wrap';
+  forgotWrap.style.cssText='display:flex;justify-content:flex-end;margin:-4px 0 6px;';
+  forgotWrap.innerHTML=`<button type="button" id="auth-forgot-toggle" class="text-button" style="font-size:12px;">${tr('비밀번호를 잊으셨나요?')}</button>`;
+  authForm.insertBefore(forgotWrap,$('#auth-error'));
+  const setMode=next=>{
+   mode=next;
+   const registering=mode==='register';
+   const forgot=mode==='forgot';
+   const resetting=mode==='reset';
+   $('#auth-name-wrap').hidden=!registering;
+   $('#auth-name').required=registering;
+   $('#auth-terms-wrap').hidden=!registering;
+   $('#auth-terms').required=registering;
+   $('#auth-confirm-wrap').hidden=!(registering||resetting);
+   $('#auth-confirm').required=registering||resetting;
+   const emailLabel=$('#auth-email').closest('label');
+   if(emailLabel)emailLabel.hidden=resetting;
+   $('#auth-email').required=!resetting;
+   const pwLabel=$('#auth-password').closest('label');
+   if(pwLabel)pwLabel.hidden=forgot;
+   $('#auth-password').required=!forgot;
+   $('#auth-password').minLength=(registering||resetting)?12:1;
+   $('#auth-password').autocomplete=(registering||resetting)?'new-password':'current-password';
+   $('#auth-password-help').textContent=tr(
+    forgot?'가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내드려요.'
+     :resetting?'새 비밀번호는 12자 이상이어야 합니다.'
+     :registering?'비밀번호는 12자 이상이어야 합니다.'
+     :'비밀번호를 입력해 주세요.'
+   );
+   $('#email-auth-submit').textContent=tr(
+    forgot?'재설정 링크 받기':resetting?'새 비밀번호 저장':registering?'회원가입':'로그인'
+   );
+   forgotWrap.hidden=!(mode==='login'||mode==='forgot');
+   const forgotToggle=$('#auth-forgot-toggle');
+   if(forgotToggle)forgotToggle.textContent=tr(forgot?'로그인으로 돌아가기':'비밀번호를 잊으셨나요?');
+   document.querySelectorAll('[data-auth-mode]').forEach(button=>{
+    const active=button.dataset.authMode===mode;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-selected',String(active));
+   });
+   $('#auth-error').textContent='';
+  };
   document.querySelectorAll('[data-auth-mode]').forEach(button=>button.onclick=()=>setMode(button.dataset.authMode));
-  authForm.onsubmit=async event=>{event.preventDefault();const button=$('#email-auth-submit'),message=$('#auth-error');button.disabled=true;message.textContent='';try{const data={email:$('#auth-email').value,password:$('#auth-password').value};if(mode==='register'){if($('#auth-password').value!==$('#auth-confirm').value)throw new Error(tr('비밀번호가 일치하지 않습니다.'));data.name=$('#auth-name').value.trim();data.acceptedTerms=$('#auth-terms').checked;}await api(`/auth/email/${mode}`,'POST',data);await boot();}catch(error){message.textContent=error.message;}finally{button.disabled=false;}};
+  $('#auth-forgot-toggle').onclick=()=>setMode(mode==='forgot'?'login':'forgot');
+  if(resetToken)setMode('reset');
+  authForm.onsubmit=async event=>{
+   event.preventDefault();
+   const button=$('#email-auth-submit'),message=$('#auth-error');
+   button.disabled=true;message.textContent='';
+   try{
+    if(mode==='forgot'){
+     const res=await api('/auth/email/forgot','POST',{email:$('#auth-email').value.trim()});
+     message.textContent='';
+     toast(res?.message||tr('가입된 이메일이라면 비밀번호 재설정 안내를 보냈어요.'));
+     setMode('login');
+     return;
+    }
+    if(mode==='reset'){
+     if($('#auth-password').value!==$('#auth-confirm').value)throw new Error(tr('비밀번호가 일치하지 않습니다.'));
+     await api('/auth/email/reset','POST',{token:resetToken,password:$('#auth-password').value});
+     toast(tr('비밀번호가 변경되었어요. 새 비밀번호로 로그인해 주세요.'));
+     history.replaceState({},'',location.pathname);
+     setMode('login');
+     return;
+    }
+    const data={email:$('#auth-email').value,password:$('#auth-password').value};
+    if(mode==='register'){
+     if($('#auth-password').value!==$('#auth-confirm').value)throw new Error(tr('비밀번호가 일치하지 않습니다.'));
+     data.name=$('#auth-name').value.trim();
+     data.acceptedTerms=$('#auth-terms').checked;
+    }
+    const res=await api(`/auth/email/${mode}`,'POST',data);
+    if(mode==='register'&&res?.isNewUser)trackFunnel('signup_complete',{source:'email'});
+    await boot();
+   }catch(error){message.textContent=error.message;}
+   finally{button.disabled=false;}
+  };
  }
+ if($('#start-sandbox-btn'))$('#start-sandbox-btn').onclick=()=>enterSandboxMode('login_button');
  $('.login-box').insertAdjacentHTML('beforeend',languageControl());
  if($('#demo-form'))$('#demo-form').onsubmit=async e=>{e.preventDefault();try{await api('/auth/demo','POST',{name:$('#demo-name').value});await boot();}catch(e){toast(e.message);}};
 }
@@ -393,6 +676,7 @@ function initializeSettingsPage(){
   }
   if(e.target.closest('[data-settings-create],[data-profile-action="create"]'))$('#create-dialog').showModal();
   if(e.target.closest('[data-profile-action="logout"]'))$('#logout').click();
+  if(e.target.closest('[data-profile-action="delete-account"]'))handleDeleteAccount();
   const calendarButton=e.target.closest('[data-profile-calendar]');
   if(calendarButton)openCalendarDetails(calendarButton.dataset.profileCalendar);
  });
@@ -488,6 +772,7 @@ function renderShell(){
    <button class="panel-arrow-btn panel-edge-toggle left-toggle" id="collapse-sidebar-btn" title="왼쪽 메뉴 접기" aria-label="왼쪽 메뉴 접기" aria-controls="main-sidebar" aria-expanded="true">‹</button>
    <button class="primary full" id="new-event">＋ 일정 만들기</button>
    <button class="secondary full schedule-share-trigger-btn" id="open-schedule-share-btn" type="button"><span aria-hidden="true">↗</span> 일정 공유 링크</button>
+   <button class="secondary full schedule-share-trigger-btn" id="open-poll-btn" type="button"><span aria-hidden="true">🗳️</span> 약속 시간 투표</button>
    <div class="nav-caption">MY SPACE</div>
    <div class="nav-active">▦ <span>공유 캘린더</span></div>
    <div class="calendar-heading"><span>내 캘린더 <span class="calendar-count-badge" id="cal-count-badge">${selectedCalendarIds.size}/${calendars.length}</span></span><button class="icon" id="new-calendar" aria-label="새 캘린더 만들기"><span aria-hidden="true">＋</span><span class="calendar-create-label">새 캘린더 만들기</span></button></div>
@@ -509,23 +794,36 @@ function renderShell(){
     </div>
     <div class="topbar-actions">
      <button class="secondary" id="share" hidden aria-label="초대 링크 및 캘린더 주소 공유"><span aria-hidden="true">↗</span><span class="share-label-desktop">초대 / 주소 공유</span><span class="share-label-mobile">초대·공유</span></button>
+     <button class="mobile-feedback-trigger" id="mobile-feedback-trigger" type="button" aria-label="기능 개선 · 버그 제보" title="기능 개선 · 버그 제보"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></button>
      <button class="mobile-search-trigger" id="mobile-search-trigger" type="button" aria-label="일정 검색" aria-controls="calendar-search" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
      <button class="mobile-more-trigger" id="mobile-more-trigger" type="button" aria-label="설정 페이지 열기" aria-controls="settings-page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
     </div>
    </header>
    <div class="workspace-body">
     <section class="calendar-section">
+     <div id="offline-banner" class="offline-banner" role="status" aria-live="polite" ${typeof navigator!=='undefined'&&navigator.onLine===false?'':'hidden'}>📡 ${tr('오프라인 상태입니다. 최근 동기화된 일정을 읽기 전용으로 표시하고 있어요.')}</div>
+     ${sandboxMode?`<div class="sandbox-banner" id="sandbox-banner" role="region" aria-label="${tr('체험 모드')}"><div class="sandbox-banner-copy"><span class="sandbox-banner-badge">${tr('체험 모드')}</span><span>${tr('체험 모드로 둘러보는 중이에요. 추가한 일정은 로그인하면 자동으로 저장됩니다.')}</span></div><div class="sandbox-banner-actions"><button type="button" class="primary" id="sandbox-signup-btn">${tr('3초 만에 로그인하고 저장하기')}</button></div></div>`:renderOnboardingTemplatesHtml()}
      <div class="calendar-toolbar">
       <div class="calendar-heading-block">
        <div class="month-heading"><h2 id="month-title"></h2></div>
        <div class="calendar-view-controls">
         <button class="today-button" id="today">오늘</button>
         <div class="view-mode-group" role="tablist" aria-label="캘린더 보기 형식"><button class="view-btn ${viewMode==='day'?'active':''}" data-view="day" role="tab" aria-selected="${viewMode==='day'}">일간</button><button class="view-btn ${viewMode==='week'?'active':''}" data-view="week" role="tab" aria-selected="${viewMode==='week'}">주간</button><button class="view-btn ${viewMode==='month'?'active':''}" data-view="month" role="tab" aria-selected="${viewMode==='month'}">월간</button></div>
+        ${viewMode==='week'?`<button type="button" class="free-slots-toggle" id="toggle-free-slots" aria-pressed="${showFreeSlots}">${tr('빈 시간 보기')}</button>`:''}
         <div class="month-nav" role="group" aria-label="달력 기간 이동"><button class="icon" id="prev" aria-label="이전 기간"><span aria-hidden="true">‹</span></button><button class="icon" id="next" aria-label="다음 기간"><span aria-hidden="true">›</span></button></div>
        </div>
       </div>
       <div class="dday-widget-bar" id="dday-widget-bar" role="region" aria-label="D-Day 위젯" hidden></div>
+      <button type="button" class="calendar-feedback-btn" id="calendar-feedback-btn" aria-label="기능 개선 · 버그 제보" title="기능 개선 · 버그 제보"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><span>의견 · 버그 제보</span></button>
      </div>
+     <form id="quick-add-form" class="quick-add-form" autocomplete="off">
+      <label class="sr-only" for="quick-add-input">${tr('빠른 일정 추가')}</label>
+      <div class="quick-add-row">
+       <input id="quick-add-input" type="text" maxlength="160" placeholder="${tr('예: 내일 오후 7시 @강남역 저녁약속 #약속 (단축키 Q)')}">
+       <button type="submit" class="primary" id="quick-add-submit">${tr('빠른 등록')}</button>
+      </div>
+      <div id="quick-add-preview" class="quick-add-preview" hidden aria-live="polite"></div>
+     </form>
      <div class="calendar-meta"><span id="calendar-meta-chips">${renderCalendarMetaChips()}</span><span id="sync-status" role="status">연결 중</span></div>
      <div id="calendar"></div>
      <div class="calendar-footer"><span>${getCalendarFooterText()}</span></div>
@@ -544,6 +842,10 @@ function renderShell(){
       <div class="section-title"><h3>지금 함께 보는 중</h3><span id="session-count" class="count">0</span></div>
       <p class="muted small">이 캘린더에 접속한 세션이에요.</p>
       <div id="presence-list"></div>
+     </section>
+     <section class="activity-feed-card" id="activity-feed-card" hidden aria-label="최근 활동">
+      <div class="section-title"><h3>최근 활동</h3></div>
+      <div id="activity-feed-list" class="activity-feed-list"></div>
      </section>
      <section class="agenda">
       <div class="section-title"><h3 id="agenda-date"></h3><button class="icon" id="agenda-add" aria-label="선택한 날짜에 일정 추가">＋</button></div>
@@ -575,17 +877,24 @@ function renderShell(){
  $('#edit-month-note').onclick=()=>setMonthNoteEditing(true);
  $('#cancel-month-note').onclick=()=>setMonthNoteEditing(false,true);
  $('#month-note-form').onsubmit=saveMonthNote;
- $('#new-calendar').onclick=()=>$('#create-dialog').showModal();
- $('#open-schedule-share-btn').onclick=()=>openScheduleShareDialog();
+ $('#new-calendar').onclick=()=>{if(sandboxMode){toast(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!'));return;}$('#create-dialog').showModal();};
+ $('#open-schedule-share-btn').onclick=()=>{if(sandboxMode){toast(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!'));return;}openScheduleShareDialog();};
+ $('#open-poll-btn').onclick=()=>{if(sandboxMode){toast(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!'));return;}openPollDialog();};
+ $('#toggle-free-slots')?.addEventListener('click',()=>{showFreeSlots=!showFreeSlots;renderShell();renderCalendar();});
+ if($('#sandbox-signup-btn'))$('#sandbox-signup-btn').onclick=()=>exitSandboxToLogin();
+ attachOnboardingTemplateHandlers();
+ attachQuickAddHandlers();
  $('#new-event').onclick=e=>openEvent(null,null,null,e.currentTarget);
  $('#mobile-create-event').onclick=e=>openEvent(null,null,null,e.currentTarget);
  $('#agenda-add').onclick=e=>openEvent(null,null,null,e.currentTarget);
  $('#event-search').oninput=renderEventSearch;
  $('#mobile-search-trigger').onclick=()=>setMobileSearchOpen(!$('#calendar-search').classList.contains('is-open'));
+ $('#mobile-feedback-trigger').onclick=()=>openFeedbackDialog();
+ $('#calendar-feedback-btn').onclick=()=>openFeedbackDialog();
  $('#event-search').onkeydown=e=>{if(e.key==='Escape'&&mobileCalendar.matches){setMobileSearchOpen(false);$('#mobile-search-trigger').focus();}};
  $('#event-form').elements.reminder_enabled.onchange=async e=>{
   $('#event-form').elements.reminder_minutes.disabled=!e.target.checked;
-  if(e.target.checked&&!window.MoaAndroidBridge&&'Notification' in window&&Notification.permission==='default'){
+  if(e.target.checked&&!window.MoaAndroidBridge&&!window.MoaMacBridge&&'Notification' in window&&Notification.permission==='default'){
    try{await Notification.requestPermission();}catch{}
   }
  };
@@ -607,12 +916,15 @@ function renderShell(){
  };
  $('#share').disabled=!current||current.role!=='owner';
  $('#share').onclick=()=>{
+  if(sandboxMode){toast(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!'));return;}
   $('#invite-result').hidden=true;
   $('#share-dialog .form-error').textContent='';
   if($('#calendar-url'))$('#calendar-url').value=`${location.origin}/${current.slug||current.id}`;
+  syncNativeShareButtons();
   $('#share-dialog').showModal();
  };
  $('#logout').onclick=async()=>{
+  if(sandboxMode){exitSandboxToLogin();return;}
   try{
    localStorage.removeItem('moa_cached_me');
    localStorage.removeItem('moa_cached_calendars');
@@ -622,10 +934,10 @@ function renderShell(){
   await boot();
  };
  $('#mobile-menu-account').textContent=me?.user?.name||'';
- $('#mobile-more-trigger').onclick=()=>openSettingsPage('calendars');
- $('#desktop-settings-trigger').onclick=()=>openSettingsPage('calendars');
- $('#mobile-sessions-trigger').onclick=()=>openSettingsPage('sessions');
- $('#mobile-profile-trigger').onclick=()=>openSettingsPage('account');
+ $('#mobile-more-trigger').onclick=()=>{if(sandboxMode){exitSandboxToLogin();return;}openSettingsPage('calendars');};
+ $('#desktop-settings-trigger').onclick=()=>{if(sandboxMode){exitSandboxToLogin();return;}openSettingsPage('calendars');};
+ $('#mobile-sessions-trigger').onclick=()=>{if(sandboxMode){toast(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!'));return;}openSettingsPage('sessions');};
+ $('#mobile-profile-trigger').onclick=()=>{if(sandboxMode){exitSandboxToLogin();return;}openSettingsPage('account');};
  attachCalendarInteractions();
  $('#cal-count-badge')?.addEventListener('click',toggleSelectAll);
 
@@ -720,6 +1032,7 @@ async function selectCalendar(ident,updateUrl=true){
    renderCalendar();
    await loadDateNotes();
    await loadMonthNotes();
+   if(typeof loadCalendarActivities==='function')loadCalendarActivities().catch(()=>{});
    renderSelectedDate();
    syncCalendarStreams();
   }catch(e){toast(e.message);}
@@ -798,6 +1111,12 @@ async function loadAllSelectedEvents(){
 }
 
 function syncCalendarStreams(){
+ if(sandboxMode){
+  connected=true;
+  sessions=[{id:'sandbox-self',name:tr('체험 모드'),joined:new Date().toISOString(),is_current:true,can_end:false}];
+  renderPresence();
+  return;
+ }
  const activeIds=new Set(selectedCalendarIds);
  if(current)activeIds.add(current.id);
  for(const [calId, stream] of calendarStreams.entries()){
@@ -830,6 +1149,10 @@ function syncCalendarStreams(){
     stream.addEventListener('session-ended',()=>{if(current?.id===calId)denyCalendarAccess('관리자가 이 기기의 세션을 종료했어요. 다시 로그인해 주세요.');else stream.close();});
     stream.addEventListener('notes',()=>loadDateNotes().catch(e=>toast(e.message)));
     stream.addEventListener('month-notes',()=>loadMonthNotes().catch(e=>toast(e.message)));
+    stream.addEventListener('event-collab',()=>{
+     if(typeof loadCalendarActivities==='function')loadCalendarActivities().catch(()=>{});
+     if(editing&&$('#event-dialog')?.open&&typeof loadEventCollaboration==='function')loadEventCollaboration(editing.id).catch(()=>{});
+    });
     stream.addEventListener('profile',async()=>{
      try{const account=await api('/api/me');if(account.user?.id===me.user?.id){me.user=account.user;renderAccountName();}}catch(error){toast(error.message);}
     });
@@ -1044,6 +1367,18 @@ function syncWithAndroidWidget(){
    console.warn('Android sync error:',e);
   }
  }
+ if(window.MoaMacBridge){
+  try{
+   if(typeof window.MoaMacBridge.syncEventsData==='function'){
+    window.MoaMacBridge.syncEventsData(
+     JSON.stringify(events||[]),
+     JSON.stringify(calendars||[])
+    );
+   }
+  }catch(e){
+   console.warn('macOS notification sync error:',e);
+  }
+ }
 }
 
 function handleWidgetUrlParams(){
@@ -1182,8 +1517,15 @@ async function updatePushSettingsUI() {
 
  if (window.MoaAndroidBridge) {
   if (toggle) { toggle.checked = true; toggle.disabled = true; }
-  if (statusText) statusText.textContent = '안드로이드 앱 전용 알림 매니저로 보호받고 있어요.';
+  if (statusText) statusText.textContent = tr('안드로이드 앱 전용 알림 매니저로 보호받고 있어요.');
   if (testAction) testAction.hidden = true;
+  return;
+ }
+
+ if (window.MoaMacBridge) {
+  if (toggle) { toggle.checked = true; toggle.disabled = true; }
+  if (statusText) statusText.textContent = tr('macOS 전용 알림 매니저로 보호받고 있어요.');
+  if (testAction) testAction.hidden = false;
   return;
  }
 
@@ -1241,7 +1583,14 @@ function initializePushSettings() {
   testBtn.onclick = async () => {
    testBtn.disabled = true;
    const resSpan = $('#push-test-result');
-   if (resSpan) resSpan.textContent = '전송 중…';
+   if (resSpan) resSpan.textContent = tr('전송 중…');
+   if (window.MoaMacBridge && typeof window.MoaMacBridge.testNotification === 'function') {
+    window.MoaMacBridge.testNotification();
+    if (resSpan) resSpan.textContent = tr('테스트 알림을 보냈어요!');
+    toast(tr('테스트 푸시 알림을 발송했어요.'));
+    testBtn.disabled = false;
+    return;
+   }
    try {
     const res = await api('/api/push/test', 'POST', {});
     if (resSpan) resSpan.textContent = res.sentCount > 0 ? '테스트 알림을 보냈어요!' : '구독 정보를 찾지 못했어요.';
@@ -1897,6 +2246,7 @@ function renderWeekView(){
    </div>
    <div class="week-col-events">
      ${items.map(e=>renderEventPill(e)).join('')}
+     ${showFreeSlots?renderWeekFreeSlotsHtml(key,items):''}
    </div>
   </div>`;
  }).join('')}</div>`;
@@ -2402,7 +2752,7 @@ async function deleteEventById(ev){
  if(!confirm(translateMessage('이 일정을 삭제할까요?')))return;
  const targetCalId=ev.calendar_id||current.id;
  try{
-  await api(`/api/calendars/${targetCalId}/events/${ev.id}`,'DELETE',{version:ev.version});
+  await api(`/api/calendars/${targetCalId}/events/${ev.id}`,'DELETE',{version:ev.version,...(ev.series_id&&$('#event-series-scope')?.value==='future'?{series_scope:'future'}:{})});
   if($('#event-dialog').open)$('#event-dialog').close();
   if(selectedEvent?.id===ev.id)selectedEvent=null;
   if(copiedEvent?.id===ev.id)copiedEvent=null;
@@ -2453,6 +2803,12 @@ window.addEventListener('keydown',e=>{
    e.preventDefault();
    setViewMode('month');
    toast('월간 보기로 전환');
+  }else if(key==='q'){
+   const quickInput=$('#quick-add-input');
+   if(quickInput){
+    e.preventDefault();
+    quickInput.focus();
+   }
   }
   return;
  }
@@ -2504,11 +2860,21 @@ function updateRepeatPreview(){
   if(unitLabel)unitLabel.textContent=locale==='en'?'years':'년';
   if(descLabel)descLabel.textContent=locale==='en'?'Total years including the first event. (Max 10 years)':'첫 일정을 포함한 년 수예요. (최대 10년)';
   if(!countInput.value||Number(countInput.value)>10||Number(countInput.value)<1)countInput.value='5';
- }else if(freq==='monthly'){
+ }else if(freq==='monthly'||freq==='monthly_last'){
   countInput.max='36';
   if(unitLabel)unitLabel.textContent=locale==='en'?'months':'개월';
   if(descLabel)descLabel.textContent=locale==='en'?'Total months including the first event. (Max 36 months)':'첫 일정을 포함한 개월 수예요. (최대 36개월)';
   if(!countInput.value||Number(countInput.value)>36||Number(countInput.value)<1)countInput.value='12';
+ }else if(freq==='weekdays'){
+  countInput.max='60';
+  if(unitLabel)unitLabel.textContent=locale==='en'?'weekdays':'일';
+  if(descLabel)descLabel.textContent=locale==='en'?'Total weekdays (Mon-Fri) including the first event. (Max 60)':'첫 일정을 포함한 평일(월~금) 횟수예요. (최대 60회)';
+  if(!countInput.value||Number(countInput.value)>60||Number(countInput.value)<1)countInput.value='10';
+ }else if(freq==='biweekly'){
+  countInput.max='52';
+  if(unitLabel)unitLabel.textContent=locale==='en'?'times':'회';
+  if(descLabel)descLabel.textContent=locale==='en'?'Total biweekly occurrences including the first event. (Max 52)':'격주(2주마다) 반복 횟수예요. (최대 52회)';
+  if(!countInput.value||Number(countInput.value)>52||Number(countInput.value)<1)countInput.value='4';
  }else{
   countInput.max='52';
   if(unitLabel)unitLabel.textContent=locale==='en'?'weeks':'주';
@@ -2534,6 +2900,12 @@ function updateRepeatPreview(){
   let summaryPrefix='';
   if(freq==='weekly'){
    summaryPrefix=`${locale==='en'?'Every':'매주'} ${dayNames[first.getDay()]}`;
+  }else if(freq==='weekdays'){
+   summaryPrefix=locale==='en'?'Every weekday (Mon-Fri)':'매주 평일 (월~금)';
+  }else if(freq==='biweekly'){
+   summaryPrefix=`${locale==='en'?'Every 2 weeks on':'격주'} ${dayNames[first.getDay()]}`;
+  }else if(freq==='monthly_last'){
+   summaryPrefix=locale==='en'?'Last day of every month':'매달 말일';
   }else if(freq==='monthly'){
    if(calendarType==='lunar'&&lunar){
     summaryPrefix=`${locale==='en'?'Every month on Lunar day ':'매달 음력 '}${lunar.day}일`;
@@ -2605,6 +2977,8 @@ function openEvent(event,defaultStart,defaultEnd,anchorElem,copying=false){
  updateEventDateInputs(allDay,allDay?start.slice(0,10):start,allDay?shiftDate(end.slice(0,10),-1):end);
  f.elements.color.value=event?.color||'sage';
  f.elements.category.value=event?.category||'';
+ if(f.elements.location)f.elements.location.value=event?.location||'';
+ if(typeof renderEventLocationMaps==='function')renderEventLocationMaps(event?.location||'');
  f.elements.notes.value=event?.notes||'';
 
  const calSelect=$('#event-calendar-select');
@@ -2628,11 +3002,19 @@ function openEvent(event,defaultStart,defaultEnd,anchorElem,copying=false){
  if(calSelect&&readonly&&editing){calSelect.innerHTML=`<option value="${targetCal.id}">${esc(targetCal.name)}</option>`;calSelectLabel.hidden=false;}
  f.querySelector('[type=submit]').hidden=readonly;
  $('#event-repeat-options').hidden=Boolean(editing)||readonly;
+ if($('#event-series-scope-wrap')){
+  $('#event-series-scope-wrap').hidden=!editing?.series_id||readonly;
+  if($('#event-series-scope'))$('#event-series-scope').value='single';
+ }
  updateRepeatPreview();
  $('#event-heading').textContent=readonly?'일정 보기':editing?'일정 수정':copying?'일정 복사':'새로운 일정';
  $('#copy-event').hidden=!editing||!defaultCalendar();
  $('#delete-event').hidden=!editing||readonly;
  f.querySelector('.form-error').textContent='';
+ if(typeof loadEventCollaboration==='function'){
+  if(editing&&!sandboxMode&&me?.user)loadEventCollaboration(editing.id).catch(()=>{});
+  else if($('#event-collab-section'))$('#event-collab-section').hidden=true;
+ }
 
  dlg.showModal();
  dlg.style.transform='';
@@ -2695,7 +3077,7 @@ $('#event-form').onsubmit=async e=>{
  b.reminder_enabled=Boolean(f.elements.reminder_enabled?.checked); b.reminder_minutes=Number(f.elements.reminder_minutes.value||10);
  if(b.reminder_enabled&&'Notification' in window&&Notification.permission==='default'){try{await Notification.requestPermission();}catch{}}
  if(b.reminder_enabled&&'Notification' in window&&Notification.permission==='denied')toast('브라우저 설정에서 알림 권한을 허용해 주세요.');
- if(b.reminder_enabled&&!window.MoaAndroidBridge&&'serviceWorker' in navigator&&'PushManager' in window&&Notification.permission!=='denied'){
+ if(b.reminder_enabled&&!window.MoaAndroidBridge&&!window.MoaMacBridge&&'serviceWorker' in navigator&&'PushManager' in window&&Notification.permission!=='denied'){
   getPushSubscription().then(sub=>{if(!sub)subscribeToPush().catch(()=>{});}).catch(()=>{});
  }
  if(b.all_day){
@@ -2715,6 +3097,14 @@ $('#event-form').onsubmit=async e=>{
   const result=await api(`/api/calendars/${sourceCalId}/events${editing?`/${editing.id}`:''}`,editing?'PUT':'POST',b);
   $('#event-dialog').close();
   selectedCalendarIds.add(targetCalId);saveSelectedCalendars();
+  if(!editing&&!sandboxMode){
+   try{
+    if(localStorage.getItem('moa_first_event_tracked')!=='1'){
+     localStorage.setItem('moa_first_event_tracked','1');
+     trackFunnel('first_event_created',{source:'event_dialog'});
+    }
+   }catch{}
+  }
   toast(result.syncPending?'일정을 이동했어요. iCloud 반영은 자동으로 다시 시도합니다.':result.moved?'일정의 캘린더를 변경했어요.':result.created>1?`${result.created}개의 반복 일정을 만들었어요.`:'일정을 저장했어요.');
   await loadAllSelectedEvents();
   renderCalendar();
@@ -2745,6 +3135,10 @@ if($('#copy-calendar-url'))$('#copy-calendar-url').onclick=async()=>{
  try{await navigator.clipboard.writeText($('#calendar-url').value);toast('캘린더 주소를 복사했어요.');}
  catch{$('#calendar-url').select();toast('주소를 복사해 주세요.');}
 };
+$('#native-share-calendar')?.addEventListener('click',()=>{
+ const url=$('#calendar-url')?.value;
+ shareLink({title:`${current?.name||'모아 캘린더'} · 모아 캘린더`,text:'함께 보는 공유 캘린더 주소예요.',url,fallbackInput:$('#calendar-url'),copiedToast:'캘린더 주소를 복사했어요.'});
+});
 
 window.onpopstate=()=>{
  if(isSettingsRoute()){restoreSettingsRoute();return;}
@@ -2759,6 +3153,8 @@ $('#make-invite').onclick=async()=>{
   const result=await api(`/api/calendars/${current.id}/invites`,'POST',{role:$('#invite-role').value});
   $('#invite-url').value=result.url;
   $('#invite-result').hidden=false;
+  syncNativeShareButtons();
+  trackFunnel('invite_created',{source:'share_dialog'});
  }catch(e){$('#share-dialog .form-error').textContent=e.message;}
 };
 
@@ -2766,6 +3162,10 @@ $('#copy-invite').onclick=async()=>{
  try{await navigator.clipboard.writeText($('#invite-url').value);toast('초대 링크를 복사했어요.');}
  catch{$('#invite-url').select();toast('링크를 선택했어요. 직접 복사해 주세요.');}
 };
+$('#native-share-invite')?.addEventListener('click',()=>{
+ const url=$('#invite-url')?.value;
+ shareLink({title:`'${current?.name||'공유 캘린더'}' 초대 · 모아 캘린더`,text:'링크를 눌러 캘린더에 바로 참여해 보세요!',url,fallbackInput:$('#invite-url'),copiedToast:'초대 링크를 복사했어요.'});
+});
 
 $('#revoke-invites').onclick=async()=>{
  if(!confirm('기존 초대 링크를 모두 만료시킬까요? 이미 참여한 멤버는 유지됩니다.'))return;
@@ -2777,6 +3177,134 @@ $('#revoke-invites').onclick=async()=>{
 };
 
 document.querySelectorAll('.close').forEach(b=>b.onclick=()=>b.closest('dialog').close());
+
+function openFeedbackDialog(){
+ const dialog=$('#feedback-dialog');
+ const form=$('#feedback-form');
+ if(!dialog||!form)return;
+ form.reset();
+ const errEl=$('#feedback-error');
+ if(errEl)errEl.textContent='';
+ const msgInput=$('#feedback-message');
+ const contactInput=$('#feedback-contact');
+ if(msgInput)msgInput.removeAttribute('aria-invalid');
+ if(contactInput)contactInput.removeAttribute('aria-invalid');
+ const countEl=$('#feedback-char-count');
+ if(countEl)countEl.textContent='0 / 1,900';
+ dialog.showModal();
+}
+
+(function initFeedbackDialog(){
+ const dialog=$('#feedback-dialog');
+ const form=$('#feedback-form');
+ if(!dialog||!form)return;
+ const msgInput=$('#feedback-message');
+ const contactInput=$('#feedback-contact');
+ const errEl=$('#feedback-error');
+ const countEl=$('#feedback-char-count');
+ const submitBtn=$('#feedback-submit-btn');
+
+ // Light-dismiss fallback for browsers without native closedby="any" (e.g. Safari)
+ if(!('closedBy' in HTMLDialogElement.prototype)){
+  const isOutside=(e,el)=>{
+   const r=el.getBoundingClientRect();
+   return e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom;
+  };
+  let pressedOutside=false;
+  dialog.addEventListener('pointerdown',e=>{pressedOutside=isOutside(e,dialog);});
+  dialog.addEventListener('pointerup',e=>{if(pressedOutside&&isOutside(e,dialog))dialog.close();});
+ }
+
+ const updateCount=()=>{
+  if(countEl&&msgInput)countEl.textContent=`${msgInput.value.length.toLocaleString()} / 1,900`;
+ };
+
+ const validateMessage=()=>{
+  if(!msgInput)return true;
+  const val=msgInput.value.trim();
+  if(!val){
+   msgInput.setAttribute('aria-invalid','true');
+   return false;
+  }
+  msgInput.removeAttribute('aria-invalid');
+  return true;
+ };
+
+ const validateContact=()=>{
+  if(!contactInput)return true;
+  const val=contactInput.value.trim();
+  if(val&&!contactInput.checkValidity()){
+   contactInput.setAttribute('aria-invalid','true');
+   return false;
+  }
+  contactInput.removeAttribute('aria-invalid');
+  return true;
+ };
+
+ if(msgInput){
+  msgInput.addEventListener('input',()=>{
+   updateCount();
+   if(msgInput.value.trim()){
+    msgInput.removeAttribute('aria-invalid');
+    if(errEl)errEl.textContent='';
+   }
+  });
+  msgInput.addEventListener('blur',()=>{
+   if(msgInput.value.length>0)validateMessage();
+  });
+ }
+
+ if(contactInput){
+  contactInput.addEventListener('input',()=>{
+   if(!contactInput.value.trim()||contactInput.checkValidity()){
+    contactInput.removeAttribute('aria-invalid');
+    if(errEl)errEl.textContent='';
+   }
+  });
+  contactInput.addEventListener('blur',()=>{
+   if(contactInput.value.trim())validateContact();
+  });
+ }
+
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(errEl)errEl.textContent='';
+  const msgOk=validateMessage();
+  if(!msgOk){
+   if(errEl)errEl.textContent=translateMessage('피드백 내용을 입력해 주세요.');
+   msgInput?.focus();
+   return;
+  }
+  const contactOk=validateContact();
+  if(!contactOk){
+   if(errEl)errEl.textContent=translateMessage('올바른 이메일 주소를 입력해 주세요.');
+   contactInput?.focus();
+   return;
+  }
+  const category=form.elements.category?.value||'feature';
+  const message=msgInput.value.trim();
+  const contact=contactInput?contactInput.value.trim():'';
+  const client=window.MoaAndroidBridge?'android':window.MoaMacBridge?'macos':'web';
+  if(submitBtn)submitBtn.disabled=true;
+  try{
+   await api('/api/feedback','POST',{
+    category,
+    message,
+    contact,
+    page:location.pathname,
+    client
+   });
+   dialog.close();
+   form.reset();
+   updateCount();
+   toast('소중한 의견을 보내주셔서 감사해요!');
+  }catch(err){
+   if(errEl)errEl.textContent=err.message||translateMessage('피드백을 접수하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }finally{
+   if(submitBtn)submitBtn.disabled=false;
+  }
+ });
+})();
 
 let managedCalendar=null, calendarDetailsRequest=0, calendarDetailsReady=false;
 async function refreshCalendarMetadata(){
@@ -2873,6 +3401,7 @@ async function loadCalendarDetails(initialize=false){
   $('#calendar-member-count').textContent=data.members.length;
   $('#calendar-details-members').innerHTML=data.members.map(person=>`<div class="calendar-person-row"><span class="avatar">${esc(person.name.slice(0,1))}</span><div class="calendar-person-info"><strong>${esc(person.name)}${person.id===me.user.id?' <small>(나)</small>':''}</strong><span>${{owner:'관리자',editor:'일정 편집 가능',viewer:'일정 보기만'}[person.role]}${person.sessions?` · 접속 중 (${person.sessions}개 세션)`:''}</span></div>${owner&&person.role!=='owner'?`<button type="button" class="admin-transfer-action" data-transfer-member="${esc(person.id)}" data-person-name="${esc(person.name)}" aria-label="${esc(person.name)}님 관리자 지정">관리자 지정</button><button type="button" class="member-text-action" data-remove-member="${esc(person.id)}" data-person-name="${esc(person.name)}" aria-label="${esc(person.name)}님 내보내기">내보내기</button>`:''}</div>`).join('');
   $('#calendar-details-invites-section').hidden=!owner;
+  if(typeof loadCalendarIcalFeedUI==='function')loadCalendarIcalFeedUI(id,owner).catch(()=>{});
   $('#calendar-details-invites').innerHTML=data.invites.length?data.invites.map((invite,i)=>{
    const roleText=invite.role==='editor'?(locale==='en'?'Can edit events':'일정 편집 가능'):(locale==='en'?'View only':'일정 보기만');
    const expDate=new Date(Number(invite.expires)).toLocaleDateString(locale==='en'?'en-US':'ko-KR');
@@ -2934,6 +3463,8 @@ $('#details-make-invite-btn')?.addEventListener('click',async()=>{
   const result=await api(`/api/calendars/${managedCalendar.id}/invites`,'POST',{role});
   if($('#details-invite-url'))$('#details-invite-url').value=result.url;
   if($('#details-invite-result'))$('#details-invite-result').hidden=false;
+  syncNativeShareButtons();
+  trackFunnel('invite_created',{source:'calendar_details'});
   try{
    await navigator.clipboard.writeText(result.url);
    toast(locale==='en'?'Created invite link and copied to clipboard.':'초대 링크를 만들고 클립보드에 복사했어요.');
@@ -2957,6 +3488,10 @@ $('#details-copy-invite-btn')?.addEventListener('click',async()=>{
   $('#details-invite-url')?.select();
   toast(locale==='en'?'Link selected. Please copy manually.':'링크를 선택했어요. 직접 복사해 주세요.');
  }
+});
+$('#details-share-invite-btn')?.addEventListener('click',()=>{
+ const url=$('#details-invite-url')?.value;
+ shareLink({title:`'${managedCalendar?.name||'공유 캘린더'}' 초대 · 모아 캘린더`,text:'링크를 눌러 캘린더에 바로 참여해 보세요!',url,fallbackInput:$('#details-invite-url'),copiedToast:'초대 링크를 복사했어요.'});
 });
 $('#view-managed-calendar').onclick=()=>{
  if(!managedCalendar)return;
@@ -3959,6 +4494,8 @@ async function handleCreateScheduleShare(event){
   $('#created-share-url').value=result.url;
   $('#open-created-share-btn').href=result.url;
   $('#created-share-result').hidden=false;
+  syncNativeShareButtons();
+  trackFunnel('share_link_created',{source:period});
   loadScheduleSharesBadge();
   toast('일정 공유 링크가 생성되었습니다!');
  }catch(err){
@@ -3984,9 +4521,529 @@ $('#copy-created-share-btn')?.addEventListener('click',async()=>{
   toast('링크를 선택했습니다. 직접 복사해 주세요.');
  }
 });
+$('#native-share-created-btn')?.addEventListener('click',()=>{
+ const url=$('#created-share-url')?.value;
+ const title=$('#share-title-input')?.value?.trim()||'일정 공유 · 모아 캘린더';
+ shareLink({title,text:'공유된 일정을 링크로 바로 확인해 보세요.',url,fallbackInput:$('#created-share-url'),copiedToast:'공유 링크가 클립보드에 복사되었습니다.'});
+});
 $('#view-all-shares-btn')?.addEventListener('click',()=>switchShareTab('manage'));
 $('[data-mobile-action="schedule-share"]')?.addEventListener('click',()=>{
  $('#mobile-more-dialog')?.close();
  openScheduleShareDialog();
+});
+
+function renderEventLocationMaps(locationText){
+ const box=$('#event-location-maps');
+ if(!box)return;
+ const urls=buildMapUrls(locationText);
+ if(!urls){box.hidden=true;box.innerHTML='';return;}
+ box.innerHTML=`<a class="event-map-link" href="${esc(urls.naver)}" target="_blank" rel="noopener noreferrer">📍 ${tr('네이버지도')} ↗</a><a class="event-map-link" href="${esc(urls.kakao)}" target="_blank" rel="noopener noreferrer">🗺️ ${tr('카카오맵')} ↗</a><a class="event-map-link" href="${esc(urls.google)}" target="_blank" rel="noopener noreferrer">🌐 ${tr('구글지도')} ↗</a>`;
+ box.hidden=false;
+}
+$('#event-location-input')?.addEventListener('input',e=>renderEventLocationMaps(e.target.value));
+
+function attachQuickAddHandlers(){
+ const form=$('#quick-add-form');
+ const input=$('#quick-add-input');
+ const preview=$('#quick-add-preview');
+ const submitBtn=$('#quick-add-submit');
+ if(!form||!input)return;
+
+ const updatePreview=()=>{
+  const parsed=parseQuickAddInput(input.value,{baseDate:new Date(),defaultDate:selected,locale});
+  if(!parsed||!preview){
+   if(preview){preview.hidden=true;preview.innerHTML='';}
+   return;
+  }
+  const datePart=parsed.start.slice(0,10);
+  const timePart=parsed.all_day?(locale==='en'?'All day':'하루 종일'):`${parsed.start.slice(11,16)}–${parsed.end.slice(11,16)}`;
+  const chips=[
+   `<span class="quick-add-chip">📅 ${esc(datePart)} · ${esc(timePart)}</span>`,
+   `<span class="quick-add-chip">${esc(parsed.title)}</span>`,
+   parsed.location?`<span class="quick-add-chip">📍 ${esc(parsed.location)}</span>`:'',
+   parsed.category?`<span class="quick-add-chip">#${esc(parsed.category)}</span>`:'',
+   parsed.is_todo?`<span class="quick-add-chip">To Do</span>`:'',
+   parsed.is_dday?`<span class="quick-add-chip">D-Day</span>`:''
+  ].filter(Boolean);
+  preview.innerHTML=chips.join('');
+  preview.hidden=false;
+ };
+
+ input.addEventListener('input',updatePreview);
+ // IME-safe Enter submit (prevents premature Korean Hangul submission in Chrome/Firefox/Safari)
+ input.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+   e.preventDefault();
+   if(e.isComposing||e.keyCode===229)return;
+   form.requestSubmit();
+  }
+ });
+
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(form.dataset.saving==='true')return;
+  const parsed=parseQuickAddInput(input.value,{baseDate:new Date(),defaultDate:selected,locale});
+  if(!parsed){
+   input.focus();
+   return;
+  }
+  const target=defaultCalendar();
+  if(!target){toast(tr('편집할 수 있는 캘린더가 없어요.'));return;}
+  form.dataset.saving='true';
+  if(submitBtn)submitBtn.disabled=true;
+  try{
+   await api(`/api/calendars/${target.id}/events`,'POST',parsed);
+   input.value='';
+   if(preview){preview.hidden=true;preview.innerHTML='';}
+   selected=parsed.start.slice(0,10);
+   month=new Date(`${selected}T12:00:00`);
+   selectedCalendarIds.add(target.id);saveSelectedCalendars();
+   if(!sandboxMode){
+    try{
+     if(localStorage.getItem('moa_first_event_tracked')!=='1'){
+      localStorage.setItem('moa_first_event_tracked','1');
+      trackFunnel('first_event_created',{source:'quick_add'});
+     }
+    }catch{}
+   }
+   await loadAllSelectedEvents();
+   renderCalendar();
+   toast(tr('일정을 저장했어요.'));
+  }catch(err){
+   toast(err.message);
+  }finally{
+   form.dataset.saving='false';
+   if(submitBtn)submitBtn.disabled=false;
+  }
+ });
+}
+
+(function initPhase2Controls(){
+ // 1. 3-state theme preference select in Settings
+ const themeSelect=$('#theme-preference-select');
+ if(themeSelect){
+  themeSelect.value=getColorSchemePreference();
+  themeSelect.addEventListener('change',e=>{
+   setColorSchemePreference(e.target.value);
+  });
+  window.addEventListener('storage',e=>{
+   if(e.key==='color-scheme')themeSelect.value=getColorSchemePreference();
+  });
+ }
+
+ // 2. Daily Morning Briefing settings
+ const briefingToggle=$('#daily-briefing-toggle');
+ const briefingTime=$('#daily-briefing-time');
+ const briefingTestBtn=$('#daily-briefing-test-btn');
+ const briefingStatus=$('#daily-briefing-status');
+
+ async function loadBriefingSettings(){
+  if(!briefingToggle||!me?.user||sandboxMode)return;
+  try{
+   const pref=await api('/api/push/briefing');
+   briefingToggle.checked=Boolean(pref.enabled);
+   if(briefingTime&&pref.briefing_time)briefingTime.value=pref.briefing_time;
+  }catch{}
+ }
+
+ async function saveBriefingSettings(){
+  if(!briefingToggle||!me?.user||sandboxMode)return;
+  const loc=getSavedWeatherLocation();
+  try{
+   if(briefingToggle.checked&&!window.MoaAndroidBridge&&!window.MoaMacBridge&&'serviceWorker' in navigator&&'PushManager' in window){
+    const sub=await getPushSubscription().catch(()=>null);
+    if(!sub)await subscribeToPush().catch(()=>{});
+   }
+   await api('/api/push/briefing','PUT',{
+    enabled:briefingToggle.checked,
+    briefing_time:briefingTime?.value||'08:00',
+    location_name:loc?.name||'서울',
+    latitude:loc?.lat??37.5665,
+    longitude:loc?.lon??126.9780
+   });
+   if(briefingStatus)briefingStatus.textContent=tr('아침 브리핑 설정을 저장했어요.');
+  }catch(err){
+   if(briefingStatus)briefingStatus.textContent=err.message;
+  }
+ }
+
+ briefingToggle?.addEventListener('change',saveBriefingSettings);
+ briefingTime?.addEventListener('change',saveBriefingSettings);
+ briefingTestBtn?.addEventListener('click',async()=>{
+  briefingTestBtn.disabled=true;
+  if(briefingStatus)briefingStatus.textContent=tr('전송 중…');
+  try{
+   const res=await api('/api/push/briefing/test','POST',{});
+   if(briefingStatus)briefingStatus.textContent=res.preview?`${tr('아침 브리핑 미리보기를 발송했어요!')} — ${res.preview}`:tr('아침 브리핑 미리보기를 발송했어요!');
+  }catch(err){
+   if(briefingStatus)briefingStatus.textContent=err.message;
+  }finally{
+   briefingTestBtn.disabled=false;
+  }
+ });
+ document.addEventListener('click',e=>{
+  if(e.target.closest('[data-settings-section="preferences"]'))loadBriefingSettings();
+ });
+
+ // 3. Offline banner & Service Worker registration for offline-read PWA
+ const updateOnlineState=()=>{
+  const banner=$('#offline-banner');
+  if(banner)banner.hidden=navigator.onLine!==false;
+ };
+ window.addEventListener('online',updateOnlineState);
+ window.addEventListener('offline',updateOnlineState);
+ if('serviceWorker' in navigator&&!window.MoaMacBridge){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+ }
+})();
+
+// Phase 3: Free-slot overlap helper, Event Collaboration (RSVP/Reactions/Comments), Activity Feed & Time Polls
+const PHASE3_REACTION_EMOJIS=['👍','❤️','🎉','🔥','👀','🙏'];
+
+function renderWeekFreeSlotsHtml(dateKey,dayItems){
+ const busy=new Set();
+ for(const ev of dayItems){
+  if(!ev||ev.is_cancelled)continue;
+  if(ev.all_day){for(let h=9;h<21;h++)busy.add(h);continue;}
+  const sDate=String(ev.start||'').slice(0,10),eDate=String(ev.end||'').slice(0,10);
+  const sH=dateKey===sDate?Number(String(ev.start).slice(11,13)):0;
+  const eHraw=dateKey===eDate?Number(String(ev.end).slice(11,13)):24;
+  const eM=dateKey===eDate?Number(String(ev.end).slice(14,16)):0;
+  const eH=eM>0?eHraw+1:eHraw;
+  for(let h=Math.max(9,sH);h<Math.min(21,eH);h++)busy.add(h);
+ }
+ const blocks=[];
+ let startH=null;
+ for(let h=9;h<=21;h++){
+  const free=h<21&&!busy.has(h);
+  if(free&&startH===null)startH=h;
+  else if(!free&&startH!==null){
+   blocks.push(`${String(startH).padStart(2,'0')}:00–${String(h).padStart(2,'0')}:00`);
+   startH=null;
+  }
+ }
+ if(!blocks.length)return '';
+ return `<div class="week-free-slots" title="${tr('빈 시간 보기')}">🟢 ${blocks.slice(0,2).join(', ')}</div>`;
+}
+
+let activeCollabEventId=null;
+async function loadEventCollaboration(eventId){
+ const section=$('#event-collab-section');
+ if(!section||!eventId||sandboxMode||!me?.user)return;
+ activeCollabEventId=eventId;
+ try{
+  const data=await api(`/api/events/${eventId}/collaboration`);
+  if(activeCollabEventId!==eventId)return;
+  const hasActivity=(data.rsvps?.length||0)>0||(data.comments?.length||0)>0||(data.reactions?.length||0)>0;
+  // Progressive disclosure: only show collaboration controls on shared calendars (2+ members) or when activity exists
+  if((data.memberCount||1)<2&&!hasActivity){
+   section.hidden=true;
+   return;
+  }
+  section.hidden=false;
+  const metaParts=[];
+  if(data.creatorName)metaParts.push(`${locale==='en'?'Created by':'작성'}: ${data.creatorName}`);
+  if(data.updaterName&&data.updaterName!==data.creatorName)metaParts.push(`${locale==='en'?'Edited by':'수정'}: ${data.updaterName}`);
+  if($('#event-collab-meta'))$('#event-collab-meta').textContent=metaParts.join(' · ');
+
+  const myRsvp=(data.rsvps||[]).find(r=>r.user_id===data.currentUserId)?.status||'';
+  section.querySelectorAll('[data-rsvp-status]').forEach(btn=>{
+   btn.classList.toggle('active',btn.dataset.rsvpStatus===myRsvp);
+   btn.setAttribute('aria-pressed',String(btn.dataset.rsvpStatus===myRsvp));
+  });
+  const rsvpList=$('#event-rsvp-list');
+  if(rsvpList){
+   const badgeMap={going:'✓',maybe:'△',declined:'✕'};
+   rsvpList.innerHTML=(data.rsvps||[]).map(r=>`<span class="rsvp-chip">${badgeMap[r.status]||''} ${esc(r.name)}</span>`).join('');
+  }
+
+  const reactBar=$('#event-reactions-bar');
+  if(reactBar){
+   reactBar.innerHTML=PHASE3_REACTION_EMOJIS.map(emoji=>{
+    const matches=(data.reactions||[]).filter(r=>r.emoji===emoji);
+    const active=matches.some(r=>r.user_id===data.currentUserId);
+    return `<button type="button" class="reaction-chip ${active?'active':''}" data-react-emoji="${emoji}" aria-pressed="${active}">${emoji}${matches.length?` <span>${matches.length}</span>`:''}</button>`;
+   }).join('');
+  }
+
+  const commentsEl=$('#event-comments-list');
+  if(commentsEl){
+   commentsEl.innerHTML=(data.comments||[]).length
+    ?(data.comments||[]).map(c=>{
+      const canDel=c.user_id===data.currentUserId||data.canModerate;
+      return `<div class="comment-item"><div class="comment-item-head"><strong>${esc(c.name)}</strong>${canDel?`<button type="button" class="comment-delete-btn" data-delete-comment="${esc(c.id)}" aria-label="삭제">✕</button>`:''}</div><div>${esc(c.body)}</div></div>`;
+     }).join('')
+    :`<p class="small muted" style="margin:0">${locale==='en'?'No comments yet.':'아직 댓글이 없어요.'}</p>`;
+  }
+ }catch{
+  section.hidden=true;
+ }
+}
+
+async function loadCalendarActivities(){
+ const card=$('#activity-feed-card');
+ const list=$('#activity-feed-list');
+ if(!card||!list||!current||sandboxMode||!me?.user)return;
+ try{
+  const data=await api(`/api/calendars/${current.id}/activities`);
+  if((data.memberCount||1)<2||!(data.activities||[]).length){
+   card.hidden=true;
+   return;
+  }
+  card.hidden=false;
+  list.innerHTML=data.activities.slice(0,10).map(a=>`<button type="button" class="activity-item" data-activity-event="${esc(a.event_id||'')}"><strong>${esc(a.actor_name)}</strong> ${esc(a.summary)}<small>${new Date(a.created_at).toLocaleString(locale==='en'?'en-US':'ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></button>`).join('');
+  list.querySelectorAll('[data-activity-event]').forEach(btn=>{
+   btn.onclick=()=>{
+    const ev=events.find(e=>e.id===btn.dataset.activityEvent);
+    if(ev){selected=ev.start.slice(0,10);month=new Date(`${selected}T12:00:00`);renderCalendar();openEvent(ev);}
+   };
+  });
+ }catch{card.hidden=true;}
+}
+
+(function initPhase3Collaboration(){
+ const section=$('#event-collab-section');
+ if(section){
+  section.addEventListener('click',async e=>{
+   if(!activeCollabEventId)return;
+   const rsvpBtn=e.target.closest('[data-rsvp-status]');
+   if(rsvpBtn){
+    try{
+     await api(`/api/events/${activeCollabEventId}/rsvp`,'PUT',{status:rsvpBtn.dataset.rsvpStatus});
+     await loadEventCollaboration(activeCollabEventId);
+    }catch(err){toast(err.message);}
+    return;
+   }
+   const reactBtn=e.target.closest('[data-react-emoji]');
+   if(reactBtn){
+    try{
+     await api(`/api/events/${activeCollabEventId}/reactions`,'POST',{emoji:reactBtn.dataset.reactEmoji});
+     await loadEventCollaboration(activeCollabEventId);
+    }catch(err){toast(err.message);}
+    return;
+   }
+   const delBtn=e.target.closest('[data-delete-comment]');
+   if(delBtn){
+    try{
+     await api(`/api/events/${activeCollabEventId}/comments/${delBtn.dataset.deleteComment}`,'DELETE',{});
+     await loadEventCollaboration(activeCollabEventId);
+    }catch(err){toast(err.message);}
+   }
+  });
+ }
+
+ const commentForm=$('#event-comment-form');
+ const commentInput=$('#event-comment-input');
+ if(commentInput&&commentForm){
+  commentInput.addEventListener('keydown',e=>{
+   if(e.key==='Enter'){
+    e.preventDefault();
+    if(e.isComposing||e.keyCode===229)return;
+    commentForm.requestSubmit();
+   }
+  });
+  commentForm.addEventListener('submit',async e=>{
+   e.preventDefault();
+   if(!activeCollabEventId)return;
+   const bodyText=commentInput.value.trim();
+   if(!bodyText)return;
+   const submitBtn=$('#event-comment-submit');
+   if(submitBtn)submitBtn.disabled=true;
+   try{
+    await api(`/api/events/${activeCollabEventId}/comments`,'POST',{body:bodyText});
+    commentInput.value='';
+    await loadEventCollaboration(activeCollabEventId);
+   }catch(err){toast(err.message);}
+   finally{if(submitBtn)submitBtn.disabled=false;}
+  });
+ }
+})();
+
+function addPollOptionRow(defaultStart='',defaultEnd=''){
+ const container=$('#poll-options-container');
+ if(!container||container.children.length>=5)return;
+ const row=document.createElement('div');
+ row.className='poll-option-row';
+ row.innerHTML=`<input type="datetime-local" data-poll-start required value="${esc(defaultStart)}"><input type="datetime-local" data-poll-end required value="${esc(defaultEnd)}"><button type="button" class="icon" data-remove-poll-opt aria-label="삭제">✕</button>`;
+ row.querySelector('[data-remove-poll-opt]').onclick=()=>{
+  if(container.children.length>2)row.remove();
+ };
+ container.appendChild(row);
+}
+
+async function loadCalendarPolls(){
+ const listEl=$('#poll-list');
+ if(!listEl||!current||sandboxMode)return;
+ listEl.innerHTML=`<p class="small muted">${tr('불러오는 중…')}</p>`;
+ try{
+  const polls=await api(`/api/calendars/${current.id}/polls`);
+  if(!polls.length){
+   listEl.innerHTML=`<p class="small muted">${locale==='en'?'No polls yet.':'아직 생성된 투표가 없어요.'}</p>`;
+   return;
+  }
+  listEl.innerHTML=polls.map(pl=>`
+   <div class="poll-card">
+    <div class="poll-card-head">
+     <strong>${esc(pl.title)}</strong>
+     <span class="share-status-pill ${pl.status==='OPEN'?'active':'expired'}">${pl.status==='CONFIRMED'?'확정됨':pl.status==='OPEN'?'진행중':'마감'}</span>
+    </div>
+    ${pl.options.map(o=>`
+     <div class="poll-card-opt">
+      <span>${esc(o.start_time.replace('T',' '))} ~ ${esc(o.end_time.slice(11,16))} (✓${o.yesCount} △${o.maybeCount})</span>
+      ${pl.status==='OPEN'?`<button type="button" class="secondary" data-confirm-poll="${esc(pl.id)}" data-confirm-opt="${esc(o.id)}">${tr('이 시간으로 확정')}</button>`:''}
+     </div>`).join('')}
+    <div class="poll-card-actions">
+     <button type="button" class="secondary" data-copy-poll-url="${esc(pl.url)}">링크 복사</button>
+     <a href="${esc(pl.url)}" target="_blank" rel="noopener" class="secondary">투표 페이지 ↗</a>
+    </div>
+   </div>`).join('');
+  listEl.querySelectorAll('[data-copy-poll-url]').forEach(btn=>{
+   btn.onclick=()=>shareLink({title:'약속 시간 투표 · 모아 캘린더',text:'가능한 시간에 투표해 주세요!',url:btn.dataset.copyPollUrl,copiedToast:'링크를 복사했어요.'});
+  });
+  listEl.querySelectorAll('[data-confirm-poll]').forEach(btn=>{
+   btn.onclick=async()=>{
+    btn.disabled=true;
+    try{
+     await api(`/api/polls/${btn.dataset.confirmPoll}/confirm`,'POST',{option_id:btn.dataset.confirmOpt});
+     toast(tr('약속 시간이 일정으로 확정되었어요!'));
+     await loadAllSelectedEvents();
+     renderCalendar();
+     await loadCalendarPolls();
+    }catch(err){toast(err.message);btn.disabled=false;}
+   };
+  });
+ }catch(err){
+  listEl.innerHTML=`<p class="form-error">${esc(err.message)}</p>`;
+ }
+}
+
+function openPollDialog(){
+ const dlg=$('#poll-dialog');
+ const form=$('#poll-create-form');
+ const container=$('#poll-options-container');
+ if(!dlg||!form||!container||!current)return;
+ form.reset();
+ container.innerHTML='';
+ $('#poll-error').textContent='';
+ const base=selected||dateKey(new Date());
+ const nextDay=shiftDate(base,1);
+ addPollOptionRow(`${base}T19:00`,`${base}T21:00`);
+ addPollOptionRow(`${nextDay}T19:00`,`${nextDay}T21:00`);
+ dlg.showModal();
+ loadCalendarPolls();
+}
+
+$('#poll-add-option-btn')?.addEventListener('click',()=>{
+ const base=selected||dateKey(new Date());
+ addPollOptionRow(`${base}T14:00`,`${base}T16:00`);
+});
+$('#poll-create-form')?.addEventListener('submit',async e=>{
+ e.preventDefault();
+ const errEl=$('#poll-error');
+ const btn=$('#poll-submit-btn');
+ errEl.textContent='';
+ const rows=[...document.querySelectorAll('#poll-options-container .poll-option-row')];
+ const options=rows.map(r=>({
+  start_time:r.querySelector('[data-poll-start]')?.value||'',
+  end_time:r.querySelector('[data-poll-end]')?.value||''
+ }));
+ if(btn)btn.disabled=true;
+ try{
+  const created=await api(`/api/calendars/${current.id}/polls`,'POST',{
+   title:$('#poll-title-input').value.trim(),
+   location:$('#poll-location-input').value.trim(),
+   options
+  });
+  toast(tr('투표 링크를 만들었어요!'));
+  try{await navigator.clipboard.writeText(created.url);}catch{}
+  await loadCalendarPolls();
+ }catch(err){
+  errEl.textContent=err.message;
+ }finally{
+  if(btn)btn.disabled=false;
+ }
+});
+
+// Phase 4: Account deletion, Password reset helper, WebCal (.ics) subscription management
+async function handleDeleteAccount(){
+ if(!me?.user||sandboxMode)return;
+ const msg=locale==='en'
+  ?'Are you sure you want to permanently delete your account? Solo calendars and all personal data will be removed and cannot be recovered.'
+  :'정말로 계정을 영구 삭제할까요? 혼자 소유한 캘린더와 개인 데이터는 모두 삭제되며 복구할 수 없습니다.';
+ if(!confirm(msg))return;
+ try{
+  await api('/api/me','DELETE',{});
+  try{localStorage.removeItem('moa_cached_me');localStorage.removeItem('moa_cached_calendars');}catch{}
+  connection?.close();
+  toast(tr('계정이 영구 삭제되었습니다.'));
+  location.href='/';
+ }catch(err){
+  toast(err.message);
+ }
+}
+
+async function loadCalendarIcalFeedUI(calendarId,isOwner){
+ const section=$('#calendar-ical-feed-section');
+ const box=$('#ical-feed-box');
+ const input=$('#ical-feed-url');
+ const webcalLink=$('#open-webcal-feed-btn');
+ const revokeBtn=$('#revoke-ical-feed-btn');
+ if(!section)return;
+ if(!isOwner||!calendarId){section.hidden=true;return;}
+ section.hidden=false;
+ try{
+  const data=await api(`/api/calendars/${calendarId}/ical-feed`);
+  if(data?.url){
+   if(input)input.value=data.url;
+   if(webcalLink)webcalLink.href=data.webcalUrl||data.url;
+   if(box)box.hidden=false;
+   if(revokeBtn)revokeBtn.hidden=false;
+  }else{
+   if(box)box.hidden=true;
+   if(revokeBtn)revokeBtn.hidden=true;
+  }
+ }catch{
+  if(box)box.hidden=true;
+ }
+}
+
+$('#rotate-ical-feed-btn')?.addEventListener('click',async()=>{
+ if(!managedCalendar||managedCalendar.role!=='owner')return;
+ const btn=$('#rotate-ical-feed-btn');
+ btn.disabled=true;
+ try{
+  const data=await api(`/api/calendars/${managedCalendar.id}/ical-feed`,'POST',{});
+  if($('#ical-feed-url'))$('#ical-feed-url').value=data.url;
+  if($('#open-webcal-feed-btn'))$('#open-webcal-feed-btn').href=data.webcalUrl||data.url;
+  if($('#ical-feed-box'))$('#ical-feed-box').hidden=false;
+  if($('#revoke-ical-feed-btn'))$('#revoke-ical-feed-btn').hidden=false;
+  toast(tr('구독 주소를 발급했어요.'));
+ }catch(err){toast(err.message);}
+ finally{btn.disabled=false;}
+});
+
+$('#copy-ical-feed-btn')?.addEventListener('click',()=>{
+ const url=$('#ical-feed-url')?.value;
+ shareLink({title:'모아 캘린더 구독 주소 (.ics)',text:'외부 캘린더 앱에서 구독할 수 있는 주소예요.',url,fallbackInput:$('#ical-feed-url'),copiedToast:'링크를 복사했어요.'});
+});
+
+$('#revoke-ical-feed-btn')?.addEventListener('click',async()=>{
+ if(!managedCalendar||managedCalendar.role!=='owner')return;
+ try{
+  await api(`/api/calendars/${managedCalendar.id}/ical-feed`,'DELETE',{});
+  if($('#ical-feed-box'))$('#ical-feed-box').hidden=true;
+  if($('#revoke-ical-feed-btn'))$('#revoke-ical-feed-btn').hidden=true;
+  toast(tr('구독 주소를 해제했어요.'));
+ }catch(err){toast(err.message);}
+});
+
+// Hook iCal feed loading whenever calendar details are opened
+document.addEventListener('click',e=>{
+ const manageBtn=e.target.closest('[data-manage-cal],[data-profile-calendar]');
+ if(manageBtn){
+  setTimeout(()=>{
+   if(managedCalendar)loadCalendarIcalFeedUI(managedCalendar.id,managedCalendar.role==='owner');
+  },120);
+ }
 });
 

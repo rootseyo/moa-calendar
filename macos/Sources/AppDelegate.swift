@@ -15,10 +15,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // 2. Setup Application Menus
         AppMenu.setupMenu(delegate: self, windowController: windowController)
 
-        // 3. Initialize & Refresh Dynamic Dock Icon
+        // 3. Setup Notifications
+        NotificationManager.shared.setup()
+
+        // 4. Initialize & Refresh Dynamic Dock Icon
         updateDockIcon()
 
-        // 4. Setup Day Change Observer & Midnight Timer
+        // 5. Setup Day Change Observer & Midnight Timer
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(dayChangedNotification),
@@ -91,6 +94,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc public func showPreferences() {
         windowController.promptForServerURL()
+    }
+
+    @objc public func showNotificationSettings() {
+        NotificationManager.shared.showNotificationStatusAlert()
+    }
+
+    @objc public func sendTestNotification() {
+        NotificationManager.shared.sendTestNotification()
     }
 
     @objc public func createNewEvent() {

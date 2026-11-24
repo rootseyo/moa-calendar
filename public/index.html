@@ -7,6 +7,7 @@
 <meta name="description" content="가족, 친구, 팀의 일정을 한곳에서 모아보세요. 모아 캘린더는 초대 링크로 함께 참여하고 월간·주간·일간 보기에서 실시간으로 일정을 공유하는 캘린더입니다.">
 <meta name="robots" content="__ROBOTS__">
 <meta name="application-name" content="모아 캘린더">
+<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#38664e">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -94,16 +95,16 @@
    </section>
    <section data-settings-panel="account" hidden><div class="settings-card settings-narrow-card" data-settings-mount="mobile-profile-dialog"></div></section>
    <section data-settings-panel="preferences" hidden>
-    <div class="settings-card settings-narrow-card"><h3>화면에 맞는 언어와 공휴일</h3><p class="settings-card-description">표시 언어와 공휴일을 확인할 지역을 선택하세요.</p><div id="settings-preferences-mount"></div><div id="lunar-settings" class="lunar-settings"><label class="migration-checkbox"><input type="checkbox" id="lunar-display-toggle"><span><strong>한국 음력 날짜 표시</strong><small id="lunar-display-description">한국 지역에서 음력 날짜와 윤달을 표시합니다. 2050년까지 지원합니다.</small></span></label></div><p class="settings-preference-note">설정을 변경하면 화면에 바로 적용됩니다.</p></div>
+    <div class="settings-card settings-narrow-card"><h3>화면에 맞는 언어와 공휴일</h3><p class="settings-card-description">표시 언어와 공휴일을 확인할 지역, 화면 테마를 선택하세요.</p><div id="settings-preferences-mount"></div><div id="theme-settings" class="theme-settings"><label class="language-control theme-control" for="theme-preference-select"><span>화면 테마</span><select id="theme-preference-select" aria-label="화면 테마"><option value="system">시스템 설정 따르기</option><option value="light">라이트 모드</option><option value="dark">다크 모드</option></select></label></div><div id="lunar-settings" class="lunar-settings"><label class="migration-checkbox"><input type="checkbox" id="lunar-display-toggle"><span><strong>한국 음력 날짜 표시</strong><small id="lunar-display-description">한국 지역에서 음력 날짜와 윤달을 표시합니다. 2050년까지 지원합니다.</small></span></label></div><p class="settings-preference-note">설정을 변경하면 화면에 바로 적용됩니다.</p></div>
     <div class="settings-card settings-narrow-card" id="weather-settings-card"><h3>날씨 및 위치 설정</h3><p class="settings-card-description">달력 날짜 옆에 예상 날씨 이모지와 비 올 확률을 표시할 위치를 설정하세요.</p><label class="migration-checkbox"><input type="checkbox" id="weather-display-toggle" checked><span><strong>달력에 예상 날씨 표시</strong><small id="weather-display-description">예보 기간의 날씨 이모지와 강수 확률을 날짜 옆에 표시합니다.</small></span></label><div class="weather-location-controls" id="weather-location-controls"><label for="weather-location-select">날씨 위치 선택<select id="weather-location-select" aria-label="날씨 위치 선택"></select></label><div class="weather-location-search-group"><label for="weather-location-query">다른 도시·지역 검색</label><div class="weather-location-search-row"><input type="search" id="weather-location-query" maxlength="80" placeholder="도시 이름 입력 (예: 수원, 성남, 제주, 도쿄)" autocomplete="off"><button type="button" id="weather-location-search-btn" class="secondary">검색</button><button type="button" id="weather-geolocate-btn" class="secondary" title="현재 위치 사용">📍 현재 위치</button></div></div><div id="weather-location-results" class="weather-location-results" hidden></div><p id="weather-location-status" class="settings-preference-note" role="status" aria-live="polite"></p></div></div>
-    <div class="settings-card settings-narrow-card" id="push-settings-card"><h3>알림 설정</h3><p class="settings-card-description">브라우저나 탭을 닫아도 일정 리마인더와 공유 캘린더 활동 알림을 받습니다.</p><label class="migration-checkbox"><input type="checkbox" id="push-notification-toggle"><span><strong id="push-notification-toggle-label">웹 푸시 알림 받기</strong><small id="push-status-text">알림 상태 확인 중…</small></span></label><div id="push-test-action" style="margin-top:14px;display:flex;align-items:center;gap:10px" hidden><button type="button" id="push-test-btn" class="secondary">테스트 알림 보내기</button><span id="push-test-result" class="muted small" role="status"></span></div><p id="push-ios-hint" class="settings-preference-note" style="margin-top:10px" hidden>💡 iPhone/iPad는 Safari 공유 메뉴에서 <strong>'홈 화면에 추가'</strong> 후 실행하면 백그라운드 푸시 알림을 받을 수 있습니다.</p></div>
+    <div class="settings-card settings-narrow-card" id="push-settings-card"><h3>알림 설정</h3><p class="settings-card-description">브라우저나 탭을 닫아도 일정 리마인더와 공유 캘린더 활동 알림을 받습니다.</p><label class="migration-checkbox"><input type="checkbox" id="push-notification-toggle"><span><strong id="push-notification-toggle-label">웹 푸시 알림 받기</strong><small id="push-status-text">알림 상태 확인 중…</small></span></label><div id="push-test-action" style="margin-top:14px;display:flex;align-items:center;gap:10px" hidden><button type="button" id="push-test-btn" class="secondary">테스트 알림 보내기</button><span id="push-test-result" class="muted small" role="status"></span></div><div id="daily-briefing-settings" class="daily-briefing-settings"><label class="migration-checkbox"><input type="checkbox" id="daily-briefing-toggle"><span><strong>오늘의 아침 브리핑 받기</strong><small>매일 아침 오늘 일정, 날씨·강수확률, 다가오는 D-Day를 한 번에 알려드려요.</small></span></label><div class="briefing-time-row"><label for="daily-briefing-time">브리핑 받을 시간<select id="daily-briefing-time" aria-label="브리핑 받을 시간"><option value="06:30">오전 6:30</option><option value="07:00">오전 7:00</option><option value="07:30">오전 7:30</option><option value="08:00" selected>오전 8:00</option><option value="08:30">오전 8:30</option><option value="09:00">오전 9:00</option><option value="09:30">오전 9:30</option><option value="10:00">오전 10:00</option></select></label><button type="button" id="daily-briefing-test-btn" class="secondary">브리핑 미리보기 발송</button></div><p id="daily-briefing-status" class="settings-preference-note" role="status" aria-live="polite"></p></div><p id="push-ios-hint" class="settings-preference-note" style="margin-top:10px" hidden>💡 iPhone/iPad는 Safari 공유 메뉴에서 <strong>'홈 화면에 추가'</strong> 후 실행하면 백그라운드 푸시 알림을 받을 수 있습니다.</p></div>
    </section>
    <section data-settings-panel="sessions" hidden><div class="settings-card settings-narrow-card" data-settings-mount="mobile-sessions-dialog"></div></section>
   </main>
  </div>
 </div>
 <div id="calendar-color-popover" class="calendar-color-popover" hidden role="dialog" aria-label="캘린더 색상 선택"><div class="calendar-color-popover-grid" id="calendar-color-popover-grid"></div></div>
-<dialog id="event-dialog"><form id="event-form"><div class="dialog-heading"><h2 id="event-heading" class="sr-only">새로운 일정</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div><p id="event-sync-status" class="muted small" role="status"></p><label id="event-calendar-select-label">캘린더 선택<select name="calendar_id" id="event-calendar-select"></select></label><label>일정 제목<input name="title" maxlength="100" placeholder="어떤 시간을 함께할까요?" required></label><label>카테고리<input name="category" maxlength="50" placeholder="예: 업무, 개인, 회의, 미팅" list="category-suggestions"></label>
+<dialog id="event-dialog"><form id="event-form"><div class="dialog-heading"><h2 id="event-heading" class="sr-only">새로운 일정</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div><p id="event-sync-status" class="muted small" role="status"></p><label id="event-calendar-select-label">캘린더 선택<select name="calendar_id" id="event-calendar-select"></select></label><label>일정 제목<input name="title" maxlength="100" placeholder="어떤 시간을 함께할까요?" required></label><label>카테고리<input name="category" maxlength="50" placeholder="예: 업무, 개인, 회의, 미팅" list="category-suggestions"></label><label>장소<input name="location" id="event-location-input" maxlength="200" placeholder="예: 강남역 10번 출구, 스타벅스"></label><div id="event-location-maps" class="event-location-maps" hidden></div>
 <fieldset class="event-color-picker"><legend>일정 색상</legend><div class="event-color-options">
 <label class="event-color-option" title="초록색"><input class="sr-only" type="radio" name="color" value="sage" aria-label="초록색" checked><span class="event-color-swatch sage" aria-hidden="true"></span></label>
 <label class="event-color-option" title="파란색"><input class="sr-only" type="radio" name="color" value="blue" aria-label="파란색"><span class="event-color-swatch blue" aria-hidden="true"></span></label>
@@ -117,7 +118,30 @@
 <label class="event-color-option" title="하늘색"><input class="sr-only" type="radio" name="color" value="cyan" aria-label="하늘색"><span class="event-color-swatch cyan" aria-hidden="true"></span></label>
 <label class="event-color-option" title="남색"><input class="sr-only" type="radio" name="color" value="indigo" aria-label="남색"><span class="event-color-swatch indigo" aria-hidden="true"></span></label>
 <label class="event-color-option" title="회색"><input class="sr-only" type="radio" name="color" value="slate" aria-label="회색"><span class="event-color-swatch slate" aria-hidden="true"></span></label>
-</div></fieldset><datalist id="category-suggestions"><option value="업무"></option><option value="개인"></option><option value="회의"></option><option value="약속"></option><option value="공부"></option><option value="기타"></option></datalist><div class="event-toggles"><label class="all-day-toggle"><input type="checkbox" name="all_day">하루 종일</label><label class="all-day-toggle todo-toggle"><input type="checkbox" name="is_todo">To Do</label><label class="all-day-toggle dday-toggle"><input type="checkbox" name="is_dday">D-Day</label><label class="all-day-toggle cancel-toggle"><input type="checkbox" name="is_cancelled">일정 취소</label><label class="all-day-toggle reminder-toggle"><input type="checkbox" name="reminder_enabled">알림 받기</label><select name="reminder_minutes" id="event-reminder-minutes" aria-label="알림 시점" class="event-reminder-select"><option value="10">10분 전</option><option value="30">30분 전</option><option value="60">1시간 전</option><option value="120">2시간 전</option><option value="180">3시간 전</option><option value="240">4시간 전</option><option value="300">5시간 전</option><option value="360">6시간 전</option><option value="420">7시간 전</option><option value="480">8시간 전</option><option value="540">9시간 전</option><option value="600">10시간 전</option><option value="660">11시간 전</option><option value="720">12시간 전</option><option value="780">13시간 전</option><option value="840">14시간 전</option><option value="900">15시간 전</option><option value="960">16시간 전</option><option value="1020">17시간 전</option><option value="1080">18시간 전</option><option value="1140">19시간 전</option><option value="1200">20시간 전</option><option value="1260">21시간 전</option><option value="1320">22시간 전</option><option value="1380">23시간 전</option><option value="1440">하루 전</option></select></div><div class="form-row event-date-row"><label><span id="event-start-label">시작 시간</span><input type="datetime-local" name="start" required></label><label><span id="event-end-label">종료 시간</span><input type="datetime-local" name="end" required></label></div><section id="event-repeat-options" class="event-repeat-options"><label>일정 반복<select name="repeat_frequency"><option value="none">반복 안 함</option><option value="weekly">매주 반복</option><option value="monthly">매달 반복</option><option value="yearly">매년 반복</option></select></label><div id="repeat-calendar-type-wrap" class="repeat-calendar-type-wrap" hidden><span class="repeat-type-label">반복 기준</span><div class="repeat-type-toggle" role="radiogroup" aria-label="반복 기준 선택"><label class="repeat-type-option"><input type="radio" name="repeat_calendar_type" value="solar" checked><span>양력</span></label><label class="repeat-type-option"><input type="radio" name="repeat_calendar_type" value="lunar"><span>음력</span></label></div></div><div id="repeat-duration" hidden><label class="repeat-weeks-label"><span id="repeat-duration-label">반복 기간</span><span class="repeat-weeks-input"><input type="number" name="repeat_weeks" min="1" max="52" step="1" value="4" inputmode="numeric" disabled><span id="repeat-duration-unit">주</span></span></label><p class="repeat-description" id="repeat-description">첫 일정을 포함한 주 수예요. (최대 52주)</p><p id="repeat-preview" class="repeat-preview" role="status" aria-live="polite"></p><p class="repeat-description">생성 후 각 일정을 개별 수정·삭제할 수 있어요.</p></div></section><label>일정 내용 (메모)<textarea name="notes" rows="3" maxlength="2000" placeholder="장소나 함께 알아둘 내용을 적어주세요."></textarea></label><p class="form-error" role="alert"></p><div class="dialog-actions"><div class="event-secondary-actions"><button type="button" id="delete-event" class="danger">일정 삭제</button><button type="button" id="copy-event" class="secondary">일정 복사</button></div><button class="primary" type="submit">일정 저장</button></div></form></dialog>
+</div></fieldset><datalist id="category-suggestions"><option value="업무"></option><option value="개인"></option><option value="회의"></option><option value="약속"></option><option value="공부"></option><option value="기타"></option></datalist><div class="event-toggles"><label class="all-day-toggle"><input type="checkbox" name="all_day">하루 종일</label><label class="all-day-toggle todo-toggle"><input type="checkbox" name="is_todo">To Do</label><label class="all-day-toggle dday-toggle"><input type="checkbox" name="is_dday">D-Day</label><label class="all-day-toggle cancel-toggle"><input type="checkbox" name="is_cancelled">일정 취소</label><label class="all-day-toggle reminder-toggle"><input type="checkbox" name="reminder_enabled">알림 받기</label><select name="reminder_minutes" id="event-reminder-minutes" aria-label="알림 시점" class="event-reminder-select"><option value="10">10분 전</option><option value="30">30분 전</option><option value="60">1시간 전</option><option value="120">2시간 전</option><option value="180">3시간 전</option><option value="240">4시간 전</option><option value="300">5시간 전</option><option value="360">6시간 전</option><option value="420">7시간 전</option><option value="480">8시간 전</option><option value="540">9시간 전</option><option value="600">10시간 전</option><option value="660">11시간 전</option><option value="720">12시간 전</option><option value="780">13시간 전</option><option value="840">14시간 전</option><option value="900">15시간 전</option><option value="960">16시간 전</option><option value="1020">17시간 전</option><option value="1080">18시간 전</option><option value="1140">19시간 전</option><option value="1200">20시간 전</option><option value="1260">21시간 전</option><option value="1320">22시간 전</option><option value="1380">23시간 전</option><option value="1440">하루 전</option></select></div><div class="form-row event-date-row"><label><span id="event-start-label">시작 시간</span><input type="datetime-local" name="start" required></label><label><span id="event-end-label">종료 시간</span><input type="datetime-local" name="end" required></label></div><section id="event-repeat-options" class="event-repeat-options"><label>일정 반복<select name="repeat_frequency"><option value="none">반복 안 함</option><option value="weekdays">평일 반복 (월~금)</option><option value="weekly">매주 반복</option><option value="biweekly">격주 반복</option><option value="monthly">매달 반복</option><option value="monthly_last">매월 말일 반복</option><option value="yearly">매년 반복</option></select></label><div id="repeat-calendar-type-wrap" class="repeat-calendar-type-wrap" hidden><span class="repeat-type-label">반복 기준</span><div class="repeat-type-toggle" role="radiogroup" aria-label="반복 기준 선택"><label class="repeat-type-option"><input type="radio" name="repeat_calendar_type" value="solar" checked><span>양력</span></label><label class="repeat-type-option"><input type="radio" name="repeat_calendar_type" value="lunar"><span>음력</span></label></div></div><div id="repeat-duration" hidden><label class="repeat-weeks-label"><span id="repeat-duration-label">반복 기간</span><span class="repeat-weeks-input"><input type="number" name="repeat_weeks" min="1" max="60" step="1" value="4" inputmode="numeric" disabled><span id="repeat-duration-unit">주</span></span></label><p class="repeat-description" id="repeat-description">첫 일정을 포함한 주 수예요. (최대 52주)</p><p id="repeat-preview" class="repeat-preview" role="status" aria-live="polite"></p><p class="repeat-description">생성 후 각 일정을 개별 수정·삭제할 수 있어요.</p></div></section><div id="event-series-scope-wrap" class="event-series-scope-wrap" hidden><label for="event-series-scope">반복 일정 적용 범위<select id="event-series-scope" name="series_scope"><option value="single">이 일정만 적용</option><option value="future">이 일정 및 이후 반복 일정 모두 적용</option></select></label></div><label>일정 내용 (메모)<textarea name="notes" rows="3" maxlength="2000" placeholder="장소나 함께 알아둘 내용을 적어주세요."></textarea></label><p class="form-error" role="alert"></p><div class="dialog-actions"><div class="event-secondary-actions"><button type="button" id="delete-event" class="danger">일정 삭제</button><button type="button" id="copy-event" class="secondary">일정 복사</button></div><button class="primary" type="submit">일정 저장</button></div></form>
+<section id="event-collab-section" class="event-collab-section" hidden aria-label="일정 협업">
+ <p id="event-collab-meta" class="small muted event-collab-meta"></p>
+ <div class="rsvp-block">
+  <span class="collab-label">참석 여부</span>
+  <div class="rsvp-btn-group" role="group" aria-label="참석 여부 선택">
+   <button type="button" class="rsvp-btn" data-rsvp-status="going">✓ 참석</button>
+   <button type="button" class="rsvp-btn" data-rsvp-status="maybe">△ 미정</button>
+   <button type="button" class="rsvp-btn" data-rsvp-status="declined">✕ 불참</button>
+  </div>
+  <div id="event-rsvp-list" class="event-rsvp-list"></div>
+ </div>
+ <div class="reactions-bar" id="event-reactions-bar" role="group" aria-label="이모지 반응"></div>
+ <div class="comments-block">
+  <span class="collab-label">댓글</span>
+  <div id="event-comments-list" class="event-comments-list"></div>
+  <form id="event-comment-form" class="event-comment-form" autocomplete="off">
+   <label class="sr-only" for="event-comment-input">댓글 입력</label>
+   <input id="event-comment-input" type="text" maxlength="500" placeholder="댓글을 남겨보세요…">
+   <button type="submit" class="secondary" id="event-comment-submit">등록</button>
+  </form>
+ </div>
+</section>
+</dialog>
 <dialog id="monthly-item-dialog" aria-labelledby="monthly-item-heading">
  <form id="monthly-item-form">
   <div class="dialog-heading"><h2 id="monthly-item-heading">월간 항목 추가</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div>
@@ -130,7 +154,7 @@
  </form>
 </dialog>
 <dialog id="create-dialog"><form id="create-form"><div class="dialog-heading"><h2>우리의 새 캘린더</h2><button type="button" class="icon close" aria-label="닫기">✕</button></div><label>캘린더 이름<input name="name" placeholder="예: 우리 가족, 사이드 프로젝트" maxlength="50" required></label><label>캘린더 접속 주소 (영문 영숫자, 선택)<input name="slug" placeholder="예: my-schedule, family (미입력시 자동 생성)" maxlength="50"></label><p class="muted">고유 주소 설정 시 <strong>dwm.brightnetworks.kr/{주소}</strong> 로 바로 열 수 있어요.</p><p class="form-error" role="alert"></p><button class="primary full" type="submit">캘린더 만들기</button></form></dialog>
-<dialog id="share-dialog"><div class="dialog-heading"><div><span class="eyebrow">BETTER TOGETHER</span><h2>링크 하나로, 함께</h2></div><button class="icon close" aria-label="닫기">✕</button></div><p class="muted">초대받은 사람은 구글 또는 카카오 로그인 후 참여해요.<br>초대 링크는 7일 동안 유효합니다.</p><label>캘린더 고유 주소<input id="calendar-url" readonly></label><button id="copy-calendar-url" type="button" class="secondary full">캘린더 주소 복사</button><label>초대할 사람의 권한<select id="invite-role"><option value="editor">일정 보기 및 편집</option><option value="viewer">일정 보기만</option></select></label><button id="make-invite" class="primary full">초대 링크 만들기</button><div id="invite-result" hidden><label>초대 링크<input id="invite-url" readonly></label><button id="copy-invite" class="secondary full">링크 복사</button></div><p class="form-error" role="alert"></p><button id="revoke-invites" class="text-button danger">기존 초대 링크 모두 만료시키기</button></dialog>
+<dialog id="share-dialog"><div class="dialog-heading"><div><span class="eyebrow">BETTER TOGETHER</span><h2>링크 하나로, 함께</h2></div><button class="icon close" aria-label="닫기">✕</button></div><p class="muted">초대받은 사람은 구글 또는 카카오 로그인 후 참여해요.<br>초대 링크는 7일 동안 유효합니다.</p><label>캘린더 고유 주소<input id="calendar-url" readonly></label><div class="share-btn-row"><button id="copy-calendar-url" type="button" class="secondary full">캘린더 주소 복사</button><button id="native-share-calendar" type="button" class="secondary native-share-btn" hidden>공유하기</button></div><label>초대할 사람의 권한<select id="invite-role"><option value="editor">일정 보기 및 편집</option><option value="viewer">일정 보기만</option></select></label><button id="make-invite" class="primary full">초대 링크 만들기</button><div id="invite-result" hidden><label>초대 링크<input id="invite-url" readonly></label><div class="share-btn-row"><button id="copy-invite" type="button" class="secondary full">링크 복사</button><button id="native-share-invite" type="button" class="primary native-share-btn" hidden>공유하기</button></div></div><p class="form-error" role="alert"></p><button id="revoke-invites" class="text-button danger">기존 초대 링크 모두 만료시키기</button></dialog>
 <dialog id="schedule-share-dialog" aria-labelledby="schedule-share-title">
  <div class="dialog-heading"><div><span class="eyebrow">READ-ONLY SHARE</span><h2 id="schedule-share-title">일정 공유 링크</h2></div><button type="button" class="icon close" aria-label="닫기">✕</button></div>
  <div class="schedule-share-tabs" role="tablist">
@@ -175,7 +199,7 @@
   <div id="created-share-result" class="created-share-box" hidden>
    <div class="share-result-title">🎉 공유 링크가 생성되었습니다!</div>
    <p class="muted small">로그인 없이 누구나 이 링크로 일정을 확인할 수 있습니다.</p>
-   <div class="share-url-row"><input type="text" id="created-share-url" readonly><button type="button" class="primary" id="copy-created-share-btn">복사</button></div>
+   <div class="share-url-row"><input type="text" id="created-share-url" readonly><button type="button" class="primary" id="copy-created-share-btn">복사</button><button type="button" class="secondary native-share-btn" id="native-share-created-btn" hidden>공유</button></div>
    <div class="share-result-actions">
     <a href="#" target="_blank" rel="noopener" id="open-created-share-btn" class="secondary">새 탭에서 열기 ↗</a>
     <button type="button" class="text-button" id="view-all-shares-btn">공유 목록 및 방문자 확인</button>
@@ -229,6 +253,7 @@
   <a href="/privacy.html?v=20261014-todo-v2" target="_blank">개인정보 처리방침</a><span>·</span><a href="/terms.html?v=20261014-todo-v2" target="_blank">서비스 이용약관</a>
  </div>
  <button type="button" class="mobile-menu-item danger" data-profile-action="logout">로그아웃</button>
+ <button type="button" class="mobile-menu-item danger" id="delete-account-btn" data-profile-action="delete-account">계정 영구 삭제</button>
 </dialog>
 <dialog id="calendar-management-dialog" aria-labelledby="calendar-management-title">
  <div class="dialog-heading"><h2 id="calendar-management-title">캘린더 관리</h2><button type="button" class="icon close" aria-label="캘린더 관리 닫기">✕</button></div>
@@ -263,12 +288,28 @@
     <div class="invite-url-copy-group">
      <input id="details-invite-url" readonly autocorrect="off" autocapitalize="off" spellcheck="false">
      <button type="button" class="secondary" id="details-copy-invite-btn">링크 복사</button>
+     <button type="button" class="primary native-share-btn" id="details-share-invite-btn" hidden>공유</button>
     </div>
     <p class="invite-created-notice muted small">초대 링크가 생성되었습니다. 7일 동안 유효합니다.</p>
    </div>
   </div>
   <div class="calendar-invites-list-heading"><h4>초대 링크 목록 및 가입 현황</h4></div>
   <div id="calendar-details-invites"></div>
+ </section>
+ <section id="calendar-ical-feed-section" class="calendar-members-section" hidden aria-labelledby="calendar-ical-feed-title">
+  <div class="section-title"><h3 id="calendar-ical-feed-title">외부 캘린더 구독 (.ics / WebCal)</h3></div>
+  <p class="muted small">Apple 캘린더(iPhone·Mac), Google 캘린더, Outlook에서 이 캘린더를 읽기 전용으로 실시간 구독할 수 있어요.</p>
+  <div id="ical-feed-box" hidden>
+   <div class="invite-url-copy-group">
+    <input id="ical-feed-url" readonly autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button type="button" class="secondary" id="copy-ical-feed-btn">주소 복사</button>
+    <a id="open-webcal-feed-btn" href="#" class="primary">구독 열기</a>
+   </div>
+  </div>
+  <div class="ical-feed-actions" style="display:flex;gap:8px;margin-top:8px">
+   <button type="button" class="secondary" id="rotate-ical-feed-btn">구독 주소 발급 · 재발급</button>
+   <button type="button" class="text-button danger" id="revoke-ical-feed-btn" hidden style="margin-top:0">구독 해제</button>
+  </div>
  </section>
  <p id="calendar-details-error" class="form-error" role="alert"></p>
  <button type="button" class="primary full" id="view-managed-calendar" disabled>이 캘린더 보기</button>
@@ -390,5 +431,62 @@
   <span>기온</span>
  </div>
  <div class="weather-hourly-list" id="weather-hourly-list" role="region" aria-label="시간대별 날씨 목록"></div>
+</dialog>
+<dialog id="feedback-dialog" closedby="any" aria-labelledby="feedback-dialog-title">
+ <form id="feedback-form" method="POST" action="/api/feedback" aria-labelledby="feedback-dialog-title" novalidate>
+  <div class="dialog-heading">
+   <div>
+    <span class="eyebrow">FEEDBACK</span>
+    <h2 id="feedback-dialog-title">기능 개선 · 버그 제보</h2>
+   </div>
+   <button type="button" class="icon close" aria-label="닫기">✕</button>
+  </div>
+  <p class="muted small">모아 캘린더를 더 편하게 쓸 수 있도록 개선 아이디어나 발견한 오류를 알려주세요.</p>
+  <fieldset class="feedback-category-group">
+   <legend>문의 유형</legend>
+   <div class="feedback-category-options">
+    <label class="feedback-category-option"><input type="radio" name="category" value="feature" checked><span>기능 개선</span></label>
+    <label class="feedback-category-option"><input type="radio" name="category" value="bug"><span>버그 제보</span></label>
+    <label class="feedback-category-option"><input type="radio" name="category" value="other"><span>기타 의견</span></label>
+   </div>
+  </fieldset>
+  <label for="feedback-message">내용 <span aria-hidden="true">*</span>
+   <textarea id="feedback-message" name="message" rows="5" maxlength="1900" required autofocus aria-describedby="feedback-message-hint" placeholder="불편했던 점, 오류 상황, 바라는 기능을 자유롭게 적어주세요."></textarea>
+  </label>
+  <div class="feedback-message-meta">
+   <span id="feedback-message-hint" class="small muted">버그 제보 시 발생 화면이나 상황을 함께 적어주시면 빠르게 확인할 수 있어요.</span>
+   <span id="feedback-char-count" class="small muted">0 / 1,900</span>
+  </div>
+  <label for="feedback-contact">답변 받을 이메일 (선택)
+   <input type="email" id="feedback-contact" name="contact" maxlength="120" autocomplete="email" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" placeholder="답변이 필요하면 이메일을 입력해 주세요">
+  </label>
+  <p id="feedback-error" class="form-error" role="alert"></p>
+  <div class="dialog-actions feedback-dialog-actions">
+   <button type="button" class="secondary close">취소</button>
+   <button type="submit" id="feedback-submit-btn" class="primary">의견 보내기</button>
+  </div>
+ </form>
+</dialog>
+<dialog id="poll-dialog" closedby="any" aria-labelledby="poll-dialog-title">
+ <div class="dialog-heading">
+  <div>
+   <span class="eyebrow">TIME POLL</span>
+   <h2 id="poll-dialog-title">약속 시간 투표</h2>
+  </div>
+  <button type="button" class="icon close" aria-label="닫기">✕</button>
+ </div>
+ <p class="muted small">후보 시간 2~5개를 만들어 링크를 보내면 로그인 없이도 가능한 시간에 투표할 수 있어요.</p>
+ <form id="poll-create-form" class="poll-create-form">
+  <label for="poll-title-input">약속 제목<input id="poll-title-input" name="title" maxlength="100" required placeholder="예: 팀 회식, 주말 브런치"></label>
+  <label for="poll-location-input">장소 (선택)<input id="poll-location-input" name="location" maxlength="200" placeholder="예: 강남역, 성수동"></label>
+  <div class="poll-options-heading"><span>후보 시간 (2~5개)</span><button type="button" class="text-button" id="poll-add-option-btn">＋ 후보 추가</button></div>
+  <div id="poll-options-container" class="poll-options-container"></div>
+  <p id="poll-error" class="form-error" role="alert"></p>
+  <button type="submit" class="primary full" id="poll-submit-btn">투표 링크 만들기</button>
+ </form>
+ <section class="poll-list-section" aria-label="진행 중인 투표">
+  <h3>이 캘린더의 투표</h3>
+  <div id="poll-list" class="poll-list"></div>
+ </section>
 </dialog>
 </body></html>
