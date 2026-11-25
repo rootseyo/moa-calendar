@@ -1719,10 +1719,12 @@ p,blockquote,label,small,.small,.muted,.form-error,.auth-help,.date-note-descrip
  --surface-subtle:#f5f7f1;
  --surface-elevated:#fcfdfa;
  --text:#283b33;
- --muted:#89958c;
+ --muted:#5f6b62;
  --border:#e5eae3;
  --green:#38664e;
  --on-primary:#ffffff;
+ --sun:#b54a3c;
+ --sat:#1d5fd8;
 }
 :root[data-theme="dark"]{
  color-scheme:dark;
@@ -1735,6 +1737,8 @@ p,blockquote,label,small,.small,.muted,.form-error,.auth-help,.date-note-descrip
  --border:#2b3a33;
  --green:#63b384;
  --on-primary:#0f1a14;
+ --sun:#f08a7e;
+ --sat:#8cb4ff;
 }
 :root{color:var(--text);background:var(--bg);accent-color:var(--green)}
 .main,.day,.week-grid,.day-view-container,.monthly-items,.settings-card,.event-search-results,.calendar-color-popover,.dday-widget,.share-item-card,.visitor-item,dialog,dialog#event-dialog{background:var(--surface);color:var(--text);border-color:var(--border)}
@@ -2082,3 +2086,14 @@ html[data-boot="guest"] .boot-splash{display:flex;align-items:center;justify-con
 }
 .board-demo-lane-head{height:17px;line-height:17px}
 @media(max-width:600px){.board-demo-lane-head{height:15px;line-height:15px}}
+
+/* Contrast fixes: theme-aware text for previously hardcoded greys/weekend colors */
+.dday-title,#monthly-items-heading,.monthly-toggle-btn{color:var(--text)}
+#add-monthly-item,.monthly-add{background:color-mix(in srgb,var(--green) 12%,var(--surface));color:var(--green)}
+.view-btn,.nav-caption,.calendar-heading,.calendar-footer,.date-note-description,#date-note-status,#month-note-status,.monthly-toggle-icon,.lunar-date,.owner-pill,.sidebar-profile small,.presence-person small,#agenda-count,.presence-card .muted,.sidebar-space-btn>span[aria-hidden]{color:var(--muted)}
+#month-note-heading{color:var(--text)}
+.weekdays span:first-child,.day-number.is-sunday,.day-number.holiday{color:var(--sun)}
+.weather-rain-prob,.weekdays span:last-child,.week-col-header .day-name.is-saturday{color:var(--sat)}
+:root[data-theme="dark"] .day-number.is-today,:root[data-theme="dark"] .day-num.is-today{color:var(--on-primary)}
+:root[data-theme="dark"] :is(.calendar-section,.calendar-toolbar,.month-heading,.right-panel,.right-panel-content,.date-note-section,.agenda){background-color:var(--surface)}
+:root[data-theme="dark"] :is(.presence-person .avatar,#session-count){background:color-mix(in srgb,var(--green) 18%,var(--surface));color:var(--text)}
