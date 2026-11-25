@@ -1551,8 +1551,8 @@ html[lang="en"] [data-current-view="day"] .month-heading h2{min-width:295px}
 }
 
 /* Landing page story tags & preview card */
-.story-tags{display:flex;flex-wrap:wrap;flex-wrap:balance;gap:8px 10px;margin-top:24px;font-size:12.5px;color:#355342}
-.story-tags span{display:inline-flex;align-items:center;gap:6px;background:rgba(56,102,78,.07);border:1px solid rgba(56,102,78,.12);padding:5px 12px;border-radius:999px;font-weight:600;line-height:1.3;white-space:nowrap}
+.story-tags{display:flex;flex-wrap:wrap;flex-wrap:balance;gap:8px 10px;margin-top:24px;font-size:12.5px;color:color-mix(in srgb,var(--green) 55%,var(--text))}
+.story-tags span{display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--green) 8%,transparent);border:1px solid color-mix(in srgb,var(--green) 16%,transparent);padding:5px 12px;border-radius:999px;font-weight:600;line-height:1.3;white-space:nowrap}
 .paper-event.paper-dday{top:62px;left:135px;width:150px;padding:8px 12px;font-size:11.5px;box-shadow:0 3px 6px rgba(0,0,0,.04)}
 .paper-event.paper-dday span{font-weight:700}
 @media(max-width:600px){
@@ -1990,3 +1990,32 @@ html.is-dragging-task,html.is-dragging-task *{cursor:grabbing!important}
 }
 @media(forced-colors:active){.task-card{border:1px solid CanvasText}.task-card.is-picked{outline-color:Highlight}}
 @media(hover:none){.task-pick-banner .kbd-hint{display:none}}
+
+/* ============================================================
+   Login / landing: 쪽지함 + Task Board highlights
+   ============================================================ */
+.story-tags .story-tag-new{background:color-mix(in srgb,#f5c542 22%,transparent);border-color:color-mix(in srgb,#c99a12 35%,transparent)}
+.story-tags em,.login-feature h3 em{font-style:normal;font-size:9px;font-weight:800;letter-spacing:.06em;padding:1px 5px;border-radius:4px;background:var(--green);color:var(--on-primary);line-height:1.4}
+.float-postit{position:absolute;right:46px;top:96px;width:158px;padding:16px 13px 12px;background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,0) 40%),#fff3a3;color:#2d2a1f;border-radius:2px 2px 4px 14px/2px 2px 4px 8px;rotate:4deg;box-shadow:0 1px 1px rgba(0,0,0,.06),0 14px 18px -10px rgba(30,25,10,.38);display:flex;flex-direction:column;gap:3px}
+.float-postit::before{content:"";position:absolute;top:-8px;left:50%;width:48px;height:15px;translate:-50% 0;rotate:-4deg;background:rgba(255,255,255,.6);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.float-postit-label{font-size:9.5px;font-weight:700;color:#b46e12}
+.float-postit strong{font-size:12.5px}
+.float-postit small{font-size:10.5px;color:rgba(45,42,31,.68)}
+.float-dm{position:absolute;right:-6px;top:222px;display:flex;align-items:center;gap:9px;padding:9px 13px 9px 9px;border-radius:16px 16px 16px 4px;background:var(--surface);border:1px solid var(--border);box-shadow:0 10px 24px rgba(50,71,55,.12);font-size:11.5px;rotate:-3deg;color:var(--text)}
+.float-dm-avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:color-mix(in srgb,var(--green) 16%,var(--surface));color:var(--green);font-weight:700;font-size:11px}
+.float-dm strong{display:block;font-size:10.5px;color:var(--muted);font-weight:700}
+.float-dm em{font-style:normal;font-size:9.5px;color:var(--green);font-weight:700;align-self:flex-end}
+@media(max-width:1100px){.float-postit{right:6px}.float-dm{right:-24px}}
+
+.login-features{grid-column:1/-1;background:var(--bg);border-top:1px solid var(--border);padding:72px 65px 84px}
+.login-features-inner{max-width:1080px;margin:0 auto}
+.login-features h2{font-size:30px;letter-spacing:-1px;line-height:1.3;margin:10px 0 10px}
+.login-features-lead{margin:0 0 34px;color:var(--muted);font-size:14px;line-height:1.7;max-width:620px}
+.login-feature-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.login-feature{padding:22px 22px 20px;border-radius:16px;background:var(--surface);border:1px solid var(--border)}
+.login-feature.is-new{border-color:color-mix(in srgb,var(--green) 35%,var(--border));background:color-mix(in srgb,var(--green) 5%,var(--surface))}
+.login-feature-icon{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:12px;background:color-mix(in srgb,var(--green) 12%,var(--surface));font-size:19px;margin-bottom:14px}
+.login-feature h3{display:flex;align-items:center;gap:7px;margin:0 0 7px;font-size:15.5px;letter-spacing:-.3px}
+.login-feature p{margin:0;color:var(--muted);font-size:13px;line-height:1.65}
+@media(max-width:850px){.login-features{padding:56px 25px 64px}.login-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.login-features{padding:44px 20px 96px}.login-features h2{font-size:23px}.login-feature-grid{grid-template-columns:1fr;gap:12px}.login-feature{padding:18px}}
