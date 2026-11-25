@@ -2205,5 +2205,15 @@ html[data-boot="guest"] .boot-splash{display:flex;align-items:center;justify-con
 #task-card-dialog::backdrop{background:transparent;backdrop-filter:none}
 #task-card-dialog{box-shadow:0 24px 70px rgba(20,30,25,.38),0 0 0 1px var(--border)}
 
-.login-legal-links .donate-link{color:var(--green);font-weight:700}
-a.settings-donate-link{display:block;text-decoration:none}
+
+/* Always-visible footer with the donate link */
+body{padding-bottom:calc(30px + env(safe-area-inset-bottom))}
+.site-footer{position:fixed;left:0;right:0;bottom:0;z-index:8;display:flex;align-items:center;justify-content:center;height:calc(30px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:color-mix(in srgb,var(--surface) 92%,transparent);border-top:1px solid var(--border);font-size:12px}
+.site-donate{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:999px;color:var(--green);font-weight:700;text-decoration:none}
+.site-donate:is(:hover,:focus-visible){background:color-mix(in srgb,var(--green) 14%,transparent);text-decoration:underline}
+@media(max-width:600px){
+ body{padding-bottom:calc(30px + 68px + env(safe-area-inset-bottom))}
+ .site-footer{bottom:calc(68px + env(safe-area-inset-bottom));height:30px;padding-bottom:0}
+ .mobile-create-action{bottom:calc(114px + env(safe-area-inset-bottom))}
+ #toast{bottom:calc(178px + env(safe-area-inset-bottom))}
+}

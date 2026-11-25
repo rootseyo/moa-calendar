@@ -1,4 +1,4 @@
-import { translateSource, translateError } from './translations.js?v=20261127-board-v4';
+import { translateSource, translateError } from './translations.js?v=20261127-board-v6';
 
 // Theme: only 'light' (default) and 'dark' are supported. Initial paint is handled by /theme.js.
 export const THEMES=['light','dark'];
@@ -95,7 +95,7 @@ document.addEventListener('change',event=>{
  }
 });
 // Do not await: app.js imports this module for locale helpers.
-import(locale==='en'?'/app.en.js?v=20261127-board-v4':'/app.js?v=20261127-board-v4').catch(error=>{
+import(locale==='en'?'/app.en.js?v=20261127-board-v6':'/app.js?v=20261127-board-v6').catch(error=>{
  const app=document.querySelector('#app');
  app.replaceChildren();
  const wrap=document.createElement('main');wrap.className='loading';
