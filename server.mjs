@@ -31,7 +31,9 @@ import {
   createTaskBoardCard,
   updateTaskBoardCard,
   reorderTaskBoardCards,
-  deleteTaskBoardCard
+  deleteTaskBoardCard,
+  applyTaskMentions,
+  syncTodoEventCard
 } from './messages-and-tasks.mjs';
 import { formatIcsCalendar } from './ical.mjs';
 import {
@@ -1472,19 +1474,21 @@ async function handleRequest(req,res){
   if(req.method==='POST'&&eventId==='reorder'){
    const b=await body(req);
    const saved=await reorderTaskBoardCards({transaction,calendarId:id,userId:user.id,status:b.status,orderedIds:b.orderedIds,movedId:b.movedId});
-   broadcast(id,'tasks');
+   broadcast(id,'tasks');if(saved.event_synced)broadcast(id);
    return json(saved);
   }
   if(req.method==='POST'&&!eventId){
    const b=await body(req);
-   const created=await createTaskBoardCard({one,calendarId:id,userId:user.id,payload:b});
+   let created=await createTaskBoardCard({one,calendarId:id,userId:user.id,payload:b});
+   created=await applyTaskMentions({all,one,run,calendarId:id,card:created,sender:user,clients,sendPush:sendPushToUser});
    broadcast(id,'tasks');
    return json(created,201);
   }
   if(req.method==='PUT'&&eventId){
    const b=await body(req);
-   const updated=await updateTaskBoardCard({one,calendarId:id,taskId:eventId,userId:user.id,payload:b});
-   broadcast(id,'tasks');
+   let updated=await updateTaskBoardCard({one,calendarId:id,taskId:eventId,userId:user.id,payload:b});
+   updated=await applyTaskMentions({all,one,run,calendarId:id,card:updated,sender:user,clients,sendPush:sendPushToUser});
+   broadcast(id,'tasks');if(updated.event_synced)broadcast(id);
    return json(updated);
   }
   if(req.method==='DELETE'&&eventId){
@@ -1710,7 +1714,7 @@ async function handleRequest(req,res){
  let existing;
  if(eventId&&await one('SELECT 1 FROM calendar_move_jobs WHERE event_id=$1',eventId))fail(409,'이 일정의 iCloud 이동을 동기화 중입니다. 잠시 후 다시 시도해 주세요.');
  if(eventId){existing=await one('SELECT * FROM events WHERE id=$1 AND calendar_id=$2',eventId,id);if(!existing)fail(404,'일정을 찾을 수 없습니다.');if(b.version!==existing.version)fail(409,'다른 사람이 일정을 변경했습니다. 최신 일정을 확인한 뒤 다시 저장해 주세요.');}
- if(req.method==='DELETE'){if(!eventId)fail(400,'일정 ID가 필요합니다.');if(b.series_scope==='future'&&existing?.series_id){await run('DELETE FROM events WHERE calendar_id=$1 AND series_id=$2 AND start>=$3',id,existing.series_id,existing.start);}else{const result=await run('DELETE FROM events WHERE id=$1 AND calendar_id=$2 AND version=$3',eventId,id,b.version);if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');}syncEngine.pushLocalEventToExternal(eventId,'delete',{calendarId:id}).catch(e=>console.warn('Two-way sync delete failed:',e.message));recordCalendarActivity(run,{calendarId:id,eventId,actorId:user.id,actorName:user.name,action:'delete',summary:`'${existing?.title||''}' 일정을 삭제했어요.`});notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'delete',eventTitle:existing?.title||''}).catch(e=>console.warn('Activity push failed:',e.message));}
+ if(req.method==='DELETE'){if(!eventId)fail(400,'일정 ID가 필요합니다.');if(b.series_scope==='future'&&existing?.series_id){await run('DELETE FROM events WHERE calendar_id=$1 AND series_id=$2 AND start>=$3',id,existing.series_id,existing.start);}else{const result=await run('DELETE FROM events WHERE id=$1 AND calendar_id=$2 AND version=$3',eventId,id,b.version);if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');}syncEngine.pushLocalEventToExternal(eventId,'delete',{calendarId:id}).catch(e=>console.warn('Two-way sync delete failed:',e.message));if(existing?.is_todo)broadcast(id,'tasks');recordCalendarActivity(run,{calendarId:id,eventId,actorId:user.id,actorName:user.name,action:'delete',summary:`'${existing?.title||''}' 일정을 삭제했어요.`});notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'delete',eventTitle:existing?.title||''}).catch(e=>console.warn('Activity push failed:',e.message));}
  else{
  if((req.method==='PUT')!==Boolean(eventId))fail(400,'잘못된 일정 요청입니다.');
  const category=typeof b.category==='string'?b.category.trim():'';
@@ -1765,7 +1769,7 @@ async function handleRequest(req,res){
   }else{
    result=await run('UPDATE events SET title=$1,start=$2,"end"=$3,color=$4,notes=$5,category=$6,all_day=$10,is_todo=$11,completed=$12,reminder_enabled=$13,reminder_minutes=$14,is_dday=$15,is_cancelled=$16,location=$17,updated_by=$18,version=version+1 WHERE id=$7 AND calendar_id=$8 AND version=$9',b.title.trim(),b.start,b.end,b.color,b.notes,category,eventId,id,b.version,allDay,isTodo,completed,reminderEnabled,reminderMinutes,isDday,isCancelled,location,user.id);
   }
-  if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');syncEngine.pushLocalEventToExternal(eventId,'update',{calendarId:id,eventData:{id:eventId,title:b.title.trim(),start:b.start,end:b.end,all_day:allDay,notes:b.notes,location,version:existing.version+1}}).catch(e=>console.warn('Two-way sync update failed:',e.message));recordCalendarActivity(run,{calendarId:id,eventId,actorId:user.id,actorName:user.name,action:'update',summary:`'${b.title.trim()}' 일정을 수정했어요.`});notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'update',eventTitle:b.title.trim()}).catch(e=>console.warn('Activity push failed:',e.message));
+  if(!result.rowCount)fail(409,'일정이 변경되었습니다. 다시 확인해 주세요.');await syncTodoCard(eventId,user.id,existing.is_todo);syncEngine.pushLocalEventToExternal(eventId,'update',{calendarId:id,eventData:{id:eventId,title:b.title.trim(),start:b.start,end:b.end,all_day:allDay,notes:b.notes,location,version:existing.version+1}}).catch(e=>console.warn('Two-way sync update failed:',e.message));recordCalendarActivity(run,{calendarId:id,eventId,actorId:user.id,actorName:user.name,action:'update',summary:`'${b.title.trim()}' 일정을 수정했어요.`});notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'update',eventTitle:b.title.trim()}).catch(e=>console.warn('Activity push failed:',e.message));
  }
  else {
   let firstNewId=null;
@@ -1779,6 +1783,7 @@ async function handleRequest(req,res){
     syncEngine.pushLocalEventToExternal(newId,'create',{calendarId:id,eventData:{id:newId,title:b.title.trim(),start:range.start,end:range.end,all_day:allDay,notes:b.notes,location}}).catch(e=>console.warn('Two-way sync create failed:',e.message));
    }
   });
+  if(isTodo&&ranges.length===1)await syncTodoCard(firstNewId,user.id,false);
   recordCalendarActivity(run,{calendarId:id,eventId:firstNewId,actorId:user.id,actorName:user.name,action:'create',summary:`'${b.title.trim()}' 일정을 등록했어요.`});
   notifyCalendarActivity({all,run},{calendarId:id,calendarName:m.name,actorUserId:user.id,actorName:user.name,action:'create',eventTitle:b.title.trim()}).catch(e=>console.warn('Activity push failed:',e.message));
   broadcast(id);return json({ok:true,created:ranges.length,seriesId});
@@ -1789,6 +1794,13 @@ async function handleRequest(req,res){
  if(!['GET','HEAD'].includes(req.method))fail(405,'허용되지 않은 요청입니다.');
  fail(404,'페이지를 찾을 수 없습니다.');
  }catch(e){console.error('ERROR:',e.status,e.message,e.stack);if(res.headersSent){res.end();return;}json({error:e.status?e.message:'요청 처리 중 오류가 발생했습니다.'},e.status||500);}
+}
+async function syncTodoCard(eventId,userId,wasTodo){
+ try{
+  const ev=await one('SELECT * FROM events WHERE id=$1',eventId);
+  if(!ev||(!ev.is_todo&&!wasTodo))return;
+  if(await syncTodoEventCard({one,run,event:ev,userId}))broadcast(ev.calendar_id,'tasks');
+ }catch(e){console.warn('To Do → Task Board sync failed:',e.message);}
 }
 async function fetchTodayWeatherSummary({latitude=37.5665,longitude=126.9780,date}){
  const cacheKey=`${Number(latitude).toFixed(3)},${Number(longitude).toFixed(3)},Asia/Seoul`;

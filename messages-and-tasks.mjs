@@ -4,6 +4,12 @@ import { normalizeEmail, validEmail } from './local-auth.mjs';
 
 export const TASK_BOARD_STATUSES = ['todo', 'in_progress', 'done'];
 
+// Only same-origin in-app paths are allowed as message links.
+export function safeMessageLink(link) {
+  const s = typeof link === 'string' ? link.trim() : '';
+  return /^\/[^/\\\s][^\s]{0,300}$|^\/$/.test(s) ? s : '';
+}
+
 function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
@@ -69,7 +75,7 @@ export async function listDirectMessages({ all, one, userId, box = 'inbox' }) {
   const normalizedBox = box === 'sent' ? 'sent' : 'inbox';
   const rows = normalizedBox === 'sent'
     ? await all(
-        `SELECT m.id, m.sender_id, m.recipient_id, m.body, m.read_at, m.created_at,
+        `SELECT m.id, m.sender_id, m.recipient_id, m.body, m.link, m.read_at, m.created_at,
                 u.name AS peer_name
          FROM direct_messages m
          JOIN users u ON u.id = m.recipient_id
@@ -79,7 +85,7 @@ export async function listDirectMessages({ all, one, userId, box = 'inbox' }) {
         userId
       )
     : await all(
-        `SELECT m.id, m.sender_id, m.recipient_id, m.body, m.read_at, m.created_at,
+        `SELECT m.id, m.sender_id, m.recipient_id, m.body, m.link, m.read_at, m.created_at,
                 u.name AS peer_name
          FROM direct_messages m
          JOIN users u ON u.id = m.sender_id
@@ -102,6 +108,7 @@ export async function sendDirectMessage({
   body,
   clients,
   sendPush,
+  link = '',
 }) {
   const text = typeof body === 'string' ? body.trim() : '';
   if (!text || text.length > 2000) {
@@ -133,13 +140,14 @@ export async function sendDirectMessage({
 
   const id = randomUUID();
   const created = await one(
-    `INSERT INTO direct_messages (id, sender_id, recipient_id, body)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, sender_id, recipient_id, body, read_at, created_at`,
+    `INSERT INTO direct_messages (id, sender_id, recipient_id, body, link)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, sender_id, recipient_id, body, link, read_at, created_at`,
     id,
     sender.id,
     target.id,
-    text
+    text,
+    safeMessageLink(link)
   );
 
   // Real-time SSE notification to all open streams of the recipient
@@ -167,7 +175,7 @@ export async function sendDirectMessage({
         title: `${sender.name}님의 새 쪽지`,
         body: text.slice(0, 90),
         tag: `moa-dm-${created.id}`,
-        url: '/',
+        url: safeMessageLink(link) || '/',
       })
     ).catch(() => {});
   }
@@ -297,8 +305,9 @@ export async function createTaskBoardCard({ one, calendarId, userId, payload }) 
   const id = randomUUID();
   const created = await one(
     `INSERT INTO task_board_cards
-       (id, calendar_id, status, title, description, color, assignee_id, due_date, sort_order, created_by, updated_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+       (id, calendar_id, status, title, description, color, assignee_id, due_date, sort_order, created_by, updated_by, task_no)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10,
+             (SELECT COALESCE(MAX(task_no), 0) + 1 FROM task_board_cards WHERE calendar_id = $2))
      RETURNING *`,
     id,
     calendarId,
@@ -370,7 +379,7 @@ export async function updateTaskBoardCard({ one, calendarId, taskId, userId, pay
     sortOrder = payload.sort_order;
   }
 
-  return one(
+  const updated = await one(
     `UPDATE task_board_cards
      SET title = $1,
          description = $2,
@@ -394,6 +403,20 @@ export async function updateTaskBoardCard({ one, calendarId, taskId, userId, pay
     taskId,
     calendarId
   );
+  const eventSynced = await syncLinkedEventCompletion({ one, card: updated, previousStatus: existing.status });
+  return { ...updated, event_synced: eventSynced };
+}
+
+// A card created from a calendar To Do keeps that event's completed flag in step with the board.
+async function syncLinkedEventCompletion({ one, card, previousStatus }) {
+  if (!card?.event_id || card.status === previousStatus) return false;
+  const row = await one(
+    'UPDATE events SET completed = $1, version = version + 1, updated_by = $2 WHERE id = $3 AND is_todo = true AND completed <> $1 RETURNING id',
+    card.status === 'done',
+    card.updated_by,
+    card.event_id
+  );
+  return Boolean(row);
 }
 
 export async function reorderTaskBoardCards({ transaction, calendarId, userId, status, orderedIds, movedId }) {
@@ -404,10 +427,11 @@ export async function reorderTaskBoardCards({ transaction, calendarId, userId, s
     throw httpError(400, '카드 순서 목록을 확인해 주세요.');
   }
 
+  let eventSynced = false;
   return transaction(async client => {
     if (movedId && typeof movedId === 'string') {
       const check = (await client.query(
-        'SELECT id FROM task_board_cards WHERE id = $1 AND calendar_id = $2 FOR UPDATE',
+        'SELECT id, event_id, status FROM task_board_cards WHERE id = $1 AND calendar_id = $2 FOR UPDATE',
         [movedId, calendarId]
       )).rows[0];
       if (!check) throw httpError(404, '이동할 카드를 찾을 수 없습니다.');
@@ -415,6 +439,13 @@ export async function reorderTaskBoardCards({ transaction, calendarId, userId, s
         'UPDATE task_board_cards SET status = $1, updated_by = $2, updated_at = now() WHERE id = $3 AND calendar_id = $4',
         [status, userId, movedId, calendarId]
       );
+      if (check.event_id && check.status !== status) {
+        const r = await client.query(
+          'UPDATE events SET completed = $1, version = version + 1, updated_by = $2 WHERE id = $3 AND is_todo = true AND completed <> $1',
+          [status === 'done', userId, check.event_id]
+        );
+        eventSynced = r.rowCount > 0;
+      }
     }
 
     for (let i = 0; i < orderedIds.length; i++) {
@@ -423,7 +454,7 @@ export async function reorderTaskBoardCards({ transaction, calendarId, userId, s
         [status, i * 10, orderedIds[i], calendarId]
       );
     }
-    return { ok: true };
+    return { ok: true, event_synced: eventSynced };
   });
 }
 
@@ -433,4 +464,119 @@ export async function deleteTaskBoardCard({ run, calendarId, taskId }) {
     throw httpError(404, '삭제할 카드를 찾을 수 없습니다.');
   }
   return { ok: true };
+}
+
+// ==========================================
+// 3. Task keys, @mentions, calendar To Do sync
+// ==========================================
+
+export function taskKey(card) {
+  return card?.task_no ? `T-${card.task_no}` : '';
+}
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Finds "@name" mentions of calendar members. Longest names are matched first so
+// "@민수진" is never read as "@민수" + "진"; trailing Korean particles ("@민수에게") still match.
+export function parseMentions(text, members) {
+  let rest = String(text || '');
+  const found = [];
+  const sorted = [...members].filter(m => m?.name).sort((a, b) => b.name.length - a.name.length);
+  for (const m of sorted) {
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}_@])@${escapeRegExp(m.name)}`, 'iu');
+    let hit = false;
+    while (re.test(rest)) {
+      rest = rest.replace(re, (_, lead) => `${lead}\u0000`);
+      hit = true;
+    }
+    if (hit && !found.includes(m.id)) found.push(m.id);
+  }
+  return found;
+}
+
+export async function applyTaskMentions({ all, one, run, calendarId, card, sender, clients, sendPush }) {
+  if (!card) return card;
+  const members = await all(
+    `SELECT u.id, u.name FROM members m JOIN users u ON u.id = m.user_id AND u.status = 'ACTIVE' WHERE m.calendar_id = $1`,
+    calendarId
+  );
+  const mentionIds = parseMentions(`${card.title}\n${card.description || ''}`, members);
+  const previous = Array.isArray(card.mention_ids) ? card.mention_ids : [];
+  const fresh = mentionIds.filter(id => id !== sender.id && !previous.includes(id));
+  if (mentionIds.length !== previous.length || mentionIds.some(id => !previous.includes(id))) {
+    await run('UPDATE task_board_cards SET mention_ids = $1::jsonb WHERE id = $2', JSON.stringify(mentionIds), card.id);
+    card = { ...card, mention_ids: mentionIds };
+  }
+  if (!fresh.length) return card;
+
+  const cal = await one('SELECT name FROM calendars WHERE id = $1', calendarId);
+  const key = taskKey(card);
+  const excerpt = (card.description || card.title).replace(/\s+/g, ' ').slice(0, 160);
+  const link = `/?calendar=${encodeURIComponent(calendarId)}&task=${encodeURIComponent(card.id)}`;
+  for (const recipientId of fresh) {
+    const body = `📌 ${sender.name}님이 Task Board${cal?.name ? ` (${cal.name})` : ''}의 ${key} "${card.title}"에서 회원님을 멘션했어요.\n\n${excerpt}`;
+    try {
+      await sendDirectMessage({ one, run, sender, recipientId, body, clients, sendPush, link });
+    } catch (err) {
+      console.warn('Task mention message failed:', err.message);
+    }
+  }
+  return card;
+}
+
+// Mirrors a calendar To Do event onto the Task Board (one card per non-recurring event).
+// Returns true when the board changed.
+export async function syncTodoEventCard({ one, run, event, userId }) {
+  if (!event?.id) return false;
+  const linked = await one('SELECT * FROM task_board_cards WHERE event_id = $1', event.id);
+  if (!event.is_todo || event.series_id) {
+    if (linked) {
+      await run('DELETE FROM task_board_cards WHERE id = $1', linked.id);
+      return true;
+    }
+    return false;
+  }
+  const dueDate = String(event.start || '').slice(0, 10);
+  const color = EVENT_COLORS.includes(event.color) ? event.color : 'sage';
+  const title = String(event.title || '').trim().slice(0, 120);
+  const description = String(event.notes || '').trim().slice(0, 2000);
+
+  if (linked) {
+    const status = event.completed ? 'done' : (linked.status === 'in_progress' ? 'in_progress' : 'todo');
+    let sortOrder = linked.sort_order;
+    if (status !== linked.status) {
+      const maxRow = await one(
+        'SELECT COALESCE(MAX(sort_order), -10)::int AS max_order FROM task_board_cards WHERE calendar_id = $1 AND status = $2',
+        linked.calendar_id,
+        status
+      );
+      sortOrder = (maxRow?.max_order ?? -10) + 10;
+    }
+    await run(
+      `UPDATE task_board_cards
+          SET title = $1, description = $2, color = $3, due_date = $4, status = $5, sort_order = $6,
+              updated_by = $7, updated_at = now()
+        WHERE id = $8`,
+      title, description, color, dueDate, status, sortOrder, userId, linked.id
+    );
+    return true;
+  }
+
+  const status = event.completed ? 'done' : 'todo';
+  const maxRow = await one(
+    'SELECT COALESCE(MAX(sort_order), -10)::int AS max_order FROM task_board_cards WHERE calendar_id = $1 AND status = $2',
+    event.calendar_id,
+    status
+  );
+  await run(
+    `INSERT INTO task_board_cards
+       (id, calendar_id, status, title, description, color, due_date, sort_order, created_by, updated_by, event_id, task_no)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10,
+             (SELECT COALESCE(MAX(task_no), 0) + 1 FROM task_board_cards WHERE calendar_id = $2))`,
+    randomUUID(), event.calendar_id, status, title, description, color, dueDate,
+    (maxRow?.max_order ?? -10) + 10, userId, event.id
+  );
+  return true;
 }

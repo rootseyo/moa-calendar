@@ -1,12 +1,12 @@
-import { locale, translateMessage, languageControl, getTheme, setTheme } from './locale.js?v=20261126-ux-v2';
-import { english } from './translations.js?v=20261126-ux-v2';
-import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261126-ux-v2';
+import { locale, translateMessage, languageControl, getTheme, setTheme } from './locale.js?v=20261127-board-v2';
+import { english } from './translations.js?v=20261127-board-v2';
+import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261127-board-v2';
 import { getHoliday, getActiveRegion, getRegionName } from './holidays.js?v=20261028-instant-calendar-v1';
 import { formatKoreanLunarDate, getKoreanLunarDate } from './lunar.js?v=20261028-instant-calendar-v1';
 import { WEATHER_PRESET_LOCATIONS, parseOpenMeteoDaily, renderWeatherBadgeHtml, renderHourlyWeatherItemsHtml, getSavedWeatherLocation, saveWeatherLocation, isWeatherEnabled, setWeatherEnabled, getWeatherLocationDisplayName, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl } from './weather.js?v=20261028-cancel-v1';
-import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261126-ux-v2';
+import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261127-board-v2';
 import { parseQuickAddInput, buildMapUrls } from './quick-add.js?v=20261124-phase2-v1';
-import { createBoardAndInboxController } from './board-and-inbox.js?v=20261126-ux-v2';
+import { createBoardAndInboxController } from './board-and-inbox.js?v=20261127-board-v2';
 const $ = s=>document.querySelector(s);
 const app=$('#app');
 const mobileCalendar=window.matchMedia('(max-width:600px)');
@@ -25,7 +25,8 @@ const boardInbox=typeof createBoardAndInboxController==='function'?createBoardAn
  isCalendarReadOnly:cal=>calendarIsReadOnly(cal),
  isSandboxMode:()=>sandboxMode,
  getMe:()=>me,
- exitSandboxToLogin:()=>exitSandboxToLogin()
+ exitSandboxToLogin:()=>exitSandboxToLogin(),
+ openTaskLink:(calendarId,taskId)=>openTaskLink(calendarId,taskId)
 }):{getWorkspaceMode:()=>'calendar',setWorkspaceMode:()=>{},syncWorkspaceModeUI:()=>{},loadTaskBoard:async()=>{},initTaskCardDialogListeners:()=>{},openInboxDialog:()=>{},refreshUnreadCount:()=>{},handleIncomingInboxEvent:()=>{},handleTasksStreamEvent:()=>{},getUnreadCount:()=>0};
 function trackFunnel(eventName,meta){
  try{window.MoaAnalytics?.track(eventName,meta);}catch{}
@@ -376,7 +377,7 @@ async function boot(){
   loadWeatherForecast();
   boardInbox.refreshUnreadCount();
   if(current)selectCalendar(current.slug||current.id,false);
-  handleWidgetUrlParams();
+  handleWidgetUrlParams();handleTaskLinkParams();
   if(isSettingsRoute())restoreSettingsRoute();
   if(migratedCount>0)toast(tr('체험 중 만든 일정을 내 캘린더로 옮겼어요!'));
   else if(importedShare){
@@ -1441,6 +1442,21 @@ function syncWithAndroidWidget(){
  }
 }
 
+async function openTaskLink(calendarId,taskId){
+ const target=calendars.find(c=>c.id===calendarId||c.slug===calendarId);
+ if(!target){toast(tr('접근할 수 없는 캘린더예요.'));return;}
+ if(current?.id!==target.id)await selectCalendar(target.id,false);
+ await boardInbox.openTaskFromLink(taskId);
+}
+function handleTaskLinkParams(){
+ const params=new URLSearchParams(location.search);
+ const calendarId=params.get('calendar'),taskId=params.get('task');
+ if(!calendarId||!taskId||!calendars.length)return;
+ const clean=new URL(location.href);
+ clean.searchParams.delete('calendar');clean.searchParams.delete('task');
+ history.replaceState({},'',clean.pathname+(clean.search||'')+clean.hash);
+ openTaskLink(calendarId,taskId).catch(e=>toast(e.message));
+}
 function handleWidgetUrlParams(){
  const params=new URLSearchParams(location.search);
  const action=params.get('action');

@@ -14,10 +14,15 @@ import {
   updateTaskBoardCard,
   reorderTaskBoardCards,
   deleteTaskBoardCard,
+  applyTaskMentions,
+  syncTodoEventCard,
+  parseMentions,
+  safeMessageLink,
+  taskKey,
 } from '../messages-and-tasks.mjs';
 import { translateSource } from '../public/translations.js';
 
-test('Direct Messages (쪽지함) & Task Board full PostgreSQL lifecycle (PGlite migrations 001..034)', async () => {
+test('Direct Messages (쪽지함) & Task Board full PostgreSQL lifecycle (PGlite migrations 001..035)', async () => {
   const pg = new PGlite();
   try {
     const dbDir = new URL('../db/', import.meta.url);
@@ -180,4 +185,102 @@ test('Task Board (never labeled Kanban) and Inbox UI, public asset routing, and 
   // Verify English translated bundle still has 100% valid JS module syntax
   const translated = translateSource(appJs);
   execFileSync(process.execPath, ['--input-type=module', '--check'], { input: translated });
+});
+
+test('Task keys, @mentions with message links, and calendar To Do → Task Board sync (PGlite)', async () => {
+  const pg = new PGlite();
+  try {
+    const dbDir = new URL('../db/', import.meta.url);
+    for (const file of readdirSync(dbDir).filter(f => f.endsWith('.sql')).sort()) {
+      await pg.exec(readFileSync(new URL(file, dbDir), 'utf8'));
+    }
+    const one = async (sql, ...params) => (await pg.query(sql, params)).rows[0];
+    const all = async (sql, ...params) => (await pg.query(sql, params)).rows;
+    const run = async (sql, ...params) => pg.query(sql, params);
+    const transaction = async fn => {
+      await pg.query('BEGIN');
+      try { const r = await fn({ query: (s, p = []) => pg.query(s, p) }); await pg.query('COMMIT'); return r; }
+      catch (e) { await pg.query('ROLLBACK'); throw e; }
+    };
+    await pg.query('INSERT INTO users(id, name) VALUES ($1,$2),($3,$4),($5,$6)', ['u1', '민수', 'u2', '이로', 'u3', '민수진']);
+    await pg.query('INSERT INTO calendars(id, name, owner, slug) VALUES($1,$2,$3,$4)', ['cal', '팀', 'u1', 'team']);
+    await pg.query('INSERT INTO members(calendar_id, user_id, role) VALUES ($1,$2,$3),($1,$4,$5),($1,$6,$5)', ['cal', 'u1', 'owner', 'u2', 'editor', 'u3']);
+    const sender = { id: 'u1', name: '민수' };
+
+    // Keys are sequential per calendar
+    const a = await createTaskBoardCard({ one, calendarId: 'cal', userId: 'u1', payload: { title: '첫 카드' } });
+    const b = await createTaskBoardCard({ one, calendarId: 'cal', userId: 'u1', payload: { title: '둘째 카드' } });
+    assert.deepEqual([taskKey(a), taskKey(b)], ['T-1', 'T-2']);
+
+    // Mentions: longest name wins, particles allowed, e-mail style text ignored, self skipped
+    const members = await all("SELECT u.id, u.name FROM members m JOIN users u ON u.id = m.user_id WHERE m.calendar_id = 'cal'");
+    assert.deepEqual(parseMentions('@민수진 확인, @이로에게 전달, a@민수 @민수', members).sort(), ['u1', 'u2', 'u3']);
+    assert.deepEqual(parseMentions('a@이로 mail', members), []);
+
+    // Creating a mention sends one message with a deep link; editing the same text does not resend
+    let card = await updateTaskBoardCard({ one, calendarId: 'cal', taskId: a.id, userId: 'u1', payload: { title: '배포 확인 @이로 부탁', description: '자세한 건 @민수 본인 메모' } });
+    card = await applyTaskMentions({ all, one, run, calendarId: 'cal', card, sender });
+    assert.deepEqual(card.mention_ids.slice().sort(), ['u1', 'u2']);
+    const inbox = (await listDirectMessages({ all, one, userId: 'u2', box: 'inbox' })).messages;
+    assert.equal(inbox.length, 1);
+    assert.match(inbox[0].body, /T-1/);
+    assert.match(inbox[0].body, /멘션/);
+    assert.equal(inbox[0].link, `/?calendar=cal&task=${a.id}`);
+    assert.equal((await listDirectMessages({ all, one, userId: 'u1', box: 'inbox' })).messages.length, 0, 'no self mention message');
+    card = await updateTaskBoardCard({ one, calendarId: 'cal', taskId: a.id, userId: 'u1', payload: { description: '자세한 건 @민수 본인 메모 (수정)' } });
+    card = await applyTaskMentions({ all, one, run, calendarId: 'cal', card: { ...card, mention_ids: ['u1', 'u2'] }, sender });
+    assert.equal((await listDirectMessages({ all, one, userId: 'u2', box: 'inbox' })).messages.length, 1, 'already-mentioned user is not re-notified');
+
+    assert.equal(safeMessageLink('//evil.example'), '');
+    assert.equal(safeMessageLink('https://evil.example'), '');
+    assert.equal(safeMessageLink('/?calendar=x&task=y'), '/?calendar=x&task=y');
+
+    // To Do events create, update, complete and delete their linked card
+    const insertEvent = async (id, extra = {}) => {
+      await pg.query(
+        'INSERT INTO events(id,calendar_id,title,start,"end",color,notes,category,all_day,is_todo,completed,series_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,false,$9,$10,$11)',
+        [id, 'cal', extra.title || '병원 예약', '2026-12-05T10:00', '2026-12-05T11:00', 'blue', '메모', '', extra.is_todo ?? true, extra.completed ?? false, extra.series_id || null]
+      );
+      return one('SELECT * FROM events WHERE id=$1', id);
+    };
+    let ev = await insertEvent('ev1');
+    assert.equal(await syncTodoEventCard({ one, run, event: ev, userId: 'u1' }), true);
+    let linked = await one('SELECT * FROM task_board_cards WHERE event_id=$1', 'ev1');
+    assert.equal(linked.status, 'todo');
+    assert.equal(linked.title, '병원 예약');
+    assert.equal(linked.due_date, '2026-12-05');
+    assert.equal(linked.task_no, 3);
+
+    await pg.query("UPDATE events SET title='병원 예약 (변경)', completed=true WHERE id='ev1'");
+    ev = await one('SELECT * FROM events WHERE id=$1', 'ev1');
+    await syncTodoEventCard({ one, run, event: ev, userId: 'u1' });
+    linked = await one('SELECT * FROM task_board_cards WHERE event_id=$1', 'ev1');
+    assert.equal(linked.status, 'done');
+    assert.equal(linked.title, '병원 예약 (변경)');
+    assert.equal((await all('SELECT id FROM task_board_cards WHERE event_id=$1', 'ev1')).length, 1, 'no duplicate card');
+
+    // Moving the card back to 진행 중 un-completes the event
+    const moved = await updateTaskBoardCard({ one, calendarId: 'cal', taskId: linked.id, userId: 'u2', payload: { status: 'in_progress' } });
+    assert.equal(moved.event_synced, true);
+    assert.equal((await one('SELECT completed FROM events WHERE id=$1', 'ev1')).completed, false);
+    // and dropping it into 완료 via reorder completes it again
+    const re = await reorderTaskBoardCards({ transaction, calendarId: 'cal', userId: 'u2', status: 'done', orderedIds: [linked.id], movedId: linked.id });
+    assert.equal(re.event_synced, true);
+    assert.equal((await one('SELECT completed FROM events WHERE id=$1', 'ev1')).completed, true);
+
+    // Unchecking To Do removes the card; recurring events are never mirrored
+    await pg.query("UPDATE events SET is_todo=false WHERE id='ev1'");
+    await syncTodoEventCard({ one, run, event: await one('SELECT * FROM events WHERE id=$1', 'ev1'), userId: 'u1' });
+    assert.equal(await one('SELECT id FROM task_board_cards WHERE event_id=$1', 'ev1'), undefined);
+    const rec = await insertEvent('ev2', { series_id: 'series-1' });
+    assert.equal(await syncTodoEventCard({ one, run, event: rec, userId: 'u1' }), false);
+
+    // Deleting the event removes its card
+    const ev3 = await insertEvent('ev3', { title: '삭제될 일정' });
+    await syncTodoEventCard({ one, run, event: ev3, userId: 'u1' });
+    await pg.query("DELETE FROM events WHERE id='ev3'");
+    assert.equal(await one('SELECT id FROM task_board_cards WHERE event_id=$1', 'ev3'), undefined);
+  } finally {
+    await pg.close();
+  }
 });

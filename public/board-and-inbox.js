@@ -1,6 +1,6 @@
 // Frontend module for Direct Messages (쪽지함) and Task Board (pick-and-move + pointer drag-and-drop)
 
-import { EVENT_COLORS } from './event-utils.js?v=20261126-ux-v2';
+import { EVENT_COLORS } from './event-utils.js?v=20261127-board-v2';
 
 export const TASK_COLUMNS = [
   { id: 'todo', ko: '할 일', en: 'To Do' },
@@ -52,13 +52,16 @@ export function attachDialogLightDismissFallback(dialog) {
 function loadSandboxCards() {
   try {
     const raw = JSON.parse(localStorage.getItem(SANDBOX_TASKS_KEY));
-    if (Array.isArray(raw) && raw.length) return raw;
+    if (Array.isArray(raw) && raw.length) {
+      let n = raw.reduce((m, c) => Math.max(m, c.task_no || 0), 0);
+      return raw.map(c => (c.task_no ? c : { ...c, task_no: ++n }));
+    }
   } catch {}
   const seed = [
-    { id: 'sb-task-1', status: 'todo', title: '주말 여행 숙소 후보 추리기', description: '바다 전망 숙소 2~3곳 비교하기', color: 'blue', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
-    { id: 'sb-task-2', status: 'todo', title: '장보기 체크리스트 작성', description: '바비큐 재료 & 음료 확인', color: 'peach', assignee_id: null, assignee_name: '', due_date: '', sort_order: 10 },
-    { id: 'sb-task-3', status: 'in_progress', title: '카드를 픽해서 다른 열로 옮겨보세요!', description: '포스트잇을 클릭해서 들어 올린 뒤, 옮길 상태 열을 클릭하세요. 끌어서 옮길 수도 있어요.', color: 'yellow', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
-    { id: 'sb-task-4', status: 'done', title: '모아 캘린더 둘러보기', description: '로그인하면 함께 쓰는 보드에 저장돼요.', color: 'lavender', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
+    { id: 'sb-task-1', task_no: 1, status: 'todo', title: '주말 여행 숙소 후보 추리기', description: '바다 전망 숙소 2~3곳 비교하기', color: 'blue', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
+    { id: 'sb-task-2', task_no: 2, status: 'todo', title: '장보기 체크리스트 작성', description: '바비큐 재료 & 음료 확인', color: 'peach', assignee_id: null, assignee_name: '', due_date: '', sort_order: 10 },
+    { id: 'sb-task-3', task_no: 3, status: 'in_progress', title: '카드를 픽해서 다른 열로 옮겨보세요!', description: '카드를 길게 누르거나 끌어서 픽한 뒤, 옮길 상태 열을 클릭하세요. 클릭하면 바로 편집돼요. @지영 처럼 멘션도 해보세요.', color: 'yellow', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
+    { id: 'sb-task-4', task_no: 4, status: 'done', title: '모아 캘린더 둘러보기', description: '로그인하면 함께 쓰는 보드에 저장돼요.', color: 'lavender', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
   ];
   try { localStorage.setItem(SANDBOX_TASKS_KEY, JSON.stringify(seed)); } catch {}
   return seed;
@@ -125,6 +128,7 @@ export function createBoardAndInboxController({
   isSandboxMode,
   getMe,
   exitSandboxToLogin,
+  openTaskLink = () => {},
 }) {
   let workspaceMode = 'calendar'; // 'calendar' | 'board'
   let boardCards = [];
@@ -151,6 +155,7 @@ export function createBoardAndInboxController({
   let expandedMessageId = null;
 
   const $ = s => document.querySelector(s);
+  const en0 = ko => (getLocale() === 'en' ? ({ '지영': 'Jiyoung', '민수': 'Minsu' }[ko] || ko) : ko);
   let sandboxInboxApi = null;
   // Messages go to the real API, or to the in-memory demo inbox in sandbox mode
   const msgApi = (path, method, body) => {
@@ -245,7 +250,7 @@ export function createBoardAndInboxController({
 
     if (isSandboxMode()) {
       boardCards = loadSandboxCards();
-      boardMembers = [];
+      boardMembers = [{ id: 'sb-u1', name: en0('지영') }, { id: 'sb-u2', name: en0('민수') }];
       boardReadOnly = false;
       renderTaskBoard();
       return;
@@ -266,6 +271,21 @@ export function createBoardAndInboxController({
     }
   }
 
+  // "@name" → highlighted mention chip (only names of calendar members are highlighted)
+  function mentionHtml(text) {
+    let html = esc(text);
+    const names = boardMembers.map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length);
+    for (const name of names) {
+      const re = new RegExp(`(^|[^\\p{L}\\p{N}_@;])@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'giu');
+      html = html.replace(re, (_, lead) => `${lead}<span class="task-mention">@${esc(name)}</span>`);
+    }
+    return html;
+  }
+
+  function taskKeyOf(card) {
+    return card?.task_no ? `T-${card.task_no}` : '';
+  }
+
   function renderCardHtml(card) {
     const en = getLocale() === 'en';
     const isPicked = pickedCardId === card.id;
@@ -273,22 +293,19 @@ export function createBoardAndInboxController({
     const color = EVENT_COLORS.includes(card.color) ? card.color : 'yellow';
     const dueLabel = card.due_date ? `<span class="task-card-due">📅 ${esc(card.due_date.slice(5).replace('-', '.'))}</span>` : '';
     const assigneeLabel = card.assignee_name ? `<span class="task-card-assignee" title="${esc(card.assignee_name)}"><span class="task-mini-avatar">${esc(card.assignee_name.slice(0, 1))}</span>${esc(card.assignee_name)}</span>` : '';
-    const descHtml = card.description ? `<p class="task-card-desc">${esc(card.description)}</p>` : '';
-    const handleLabel = en ? `Pick up ${card.title}` : `${card.title} 카드 픽하기`;
-    const editLabel = en ? `Edit ${card.title}` : `${card.title} 카드 편집`;
+    const descHtml = card.description ? `<p class="task-card-desc">${mentionHtml(card.description)}</p>` : '';
+    const key = taskKeyOf(card);
+    const calendarTag = card.event_id ? `<span class="task-card-origin" title="${en ? 'Created from a calendar To Do' : '달력 To Do에서 자동 등록됨'}">📅</span>` : '';
+    const label = `${key ? key + ' ' : ''}${card.title}`;
     const classes = ['task-card', 'postit', color, isPicked ? 'is-picked' : '', justDropped ? 'is-dropped' : '', boardReadOnly ? 'is-readonly' : ''].filter(Boolean).join(' ');
 
-    return `<article class="${classes}" data-task-id="${esc(card.id)}" data-task-status="${esc(card.status)}">
-      <div class="task-card-top">
-        ${boardReadOnly ? '' : `<button type="button" class="task-card-handle" data-task-handle="${esc(card.id)}" aria-label="${esc(handleLabel)}" aria-pressed="${isPicked}" title="${en ? 'Click to pick up, or drag' : '클릭해서 픽하거나 드래그하세요'}"><span aria-hidden="true">✋</span></button>`}
-        <button type="button" class="task-card-edit" data-task-edit="${esc(card.id)}" aria-label="${esc(editLabel)}" title="${en ? 'Edit' : '편집'}"><span aria-hidden="true">✎</span></button>
-      </div>
+    return `<article class="${classes}" data-task-id="${esc(card.id)}" data-task-status="${esc(card.status)}" tabindex="0" role="button" aria-pressed="${isPicked}" aria-label="${esc(label)}" title="${en ? 'Click to edit · hold or drag to pick up' : '클릭하면 편집 · 길게 누르거나 끌면 픽'}">
+      ${key || calendarTag ? `<div class="task-card-top"><span class="task-card-key">${esc(key)}</span>${calendarTag}</div>` : ''}
       <div class="task-card-body">
-        <strong class="task-card-title">${esc(card.title)}</strong>
+        <strong class="task-card-title">${mentionHtml(card.title)}</strong>
         ${descHtml}
       </div>
       ${(dueLabel || assigneeLabel) ? `<div class="task-card-meta">${dueLabel}${assigneeLabel}</div>` : ''}
-      ${!boardReadOnly && isPicked ? `<span class="task-card-key-hint" aria-hidden="true">${en ? 'Click a column to drop · ←→ move · Esc cancel' : '옮길 열을 클릭 · ←→ 이동 · Esc 취소'}</span>` : ''}
     </article>`;
   }
 
@@ -313,17 +330,13 @@ export function createBoardAndInboxController({
             <h2>Task Board</h2>
             <span class="task-board-cal-pill">${esc(cal.name)}</span>
           </div>
-          <p class="muted small">${en ? 'Click a sticky note to pick it up, then click another column to move it. You can also drag it.' : '포스트잇을 클릭해서 픽(들기)한 뒤, 옮길 상태 열을 클릭하세요. 끌어서 옮길 수도 있어요.'}</p>
+          <p class="muted small">${en ? 'Click a note to edit it. Hold it (or drag) to pick it up, then click a column to move it.' : '카드를 클릭하면 바로 편집해요. 길게 누르거나 끌면 픽 모드가 되고, 옮길 열을 클릭하면 이동해요.'}</p>
         </div>
         <div class="task-board-header-actions">
           <button type="button" class="secondary" data-board-back-calendar>${en ? '← Calendar View' : '← 달력 보기로'}</button>
           ${boardReadOnly ? '' : `<button type="button" class="primary" id="task-board-new-card-btn">＋ ${en ? 'New Card' : '새 카드'}</button>`}
         </div>
       </div>
-      ${pickedCard ? `<div class="task-pick-banner" role="region" aria-label="${en ? 'Picked card' : '픽한 카드 안내'}">
-        <span>✋ <strong>${esc(pickedCard.title)}</strong> ${en ? 'is picked up — click a column (or a spot between notes) to drop it.' : '카드를 들었어요! 옮길 상태 열이나 위치를 클릭해 내려놓으세요.'}</span>
-        <button type="button" class="secondary small-btn" id="cancel-picked-card-btn">${en ? 'Cancel' : '픽 취소'}<span class="kbd-hint"> (Esc)</span></button>
-      </div>` : ''}
       <p id="task-board-live" role="status" class="sr-only"></p>
       <div class="task-board-columns ${pickedCard ? 'has-picked' : ''}" id="task-board-columns">
         ${TASK_COLUMNS.map(col => {
@@ -456,7 +469,7 @@ export function createBoardAndInboxController({
     }
 
     if (focusHandleAfter) {
-      const h = cardEl.querySelector('.task-card-handle');
+      const h = cardEl;
       h?.focus({ preventScroll: true });
     }
 
@@ -488,7 +501,7 @@ export function createBoardAndInboxController({
           : `'${card?.title || ''}' 카드를 픽했어요. 방향키나 클릭으로 원하는 열로 옮기세요.`
       );
       if (focusHandle) {
-        const handle = document.querySelector(`.task-card-handle[data-task-handle="${CSS.escape(cardId)}"]`);
+        const handle = document.querySelector(`.task-card[data-task-id="${CSS.escape(cardId)}"]`);
         handle?.focus({ preventScroll: true });
       }
     }
@@ -510,12 +523,8 @@ export function createBoardAndInboxController({
     const cardId = cardEl.dataset.taskId;
     const boardEl = $('#task-board-columns');
     if (!cardId || !boardEl) return;
-    // Edit button never starts a drag; on touch, only the ✋ handle drags (body keeps page scrolling)
-    if (e.target.closest('[data-task-edit]')) return;
-    const fromHandle = Boolean(e.target.closest('[data-task-handle]'));
-    if (e.pointerType === 'touch' && !fromHandle) return;
-
-    if (fromHandle) e.preventDefault();
+    // Touch keeps scrolling the page; touch users pick a card with a long press instead
+    if (e.pointerType === 'touch') return;
     const pointerId = e.pointerId;
     const handleEl = cardEl;
 
@@ -605,6 +614,8 @@ export function createBoardAndInboxController({
       activeDrag = null;
     };
 
+    activeDrag.cancel = () => cleanup();
+
     const onMove = ev => {
       if (ev.pointerId !== pointerId) return;
       const dx = ev.clientX - startX;
@@ -662,10 +673,45 @@ export function createBoardAndInboxController({
     document.addEventListener('keydown', onKeyDown, true);
   }
 
+  // Hold a card still for a moment (mouse or touch) to pick it up without dragging.
+  const LONG_PRESS_MS = 380;
+  function startLongPress(e, cardEl) {
+    if (e.button !== 0 || boardReadOnly || activeDrag || pickedCardId) return;
+    const cardId = cardEl.dataset.taskId;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const pointerId = e.pointerId;
+    let fired = false;
+    const stop = () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onEnd);
+      document.removeEventListener('pointercancel', onEnd);
+    };
+    const onMove = ev => {
+      if (ev.pointerId !== pointerId || fired) return;
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8) stop();
+    };
+    const onEnd = ev => {
+      if (ev.pointerId !== pointerId) return;
+      stop();
+      if (fired) suppressCardClickUntil = Date.now() + 350;
+    };
+    const timer = setTimeout(() => {
+      fired = true;
+      activeDrag?.cancel?.();
+      suppressCardClickUntil = Date.now() + 60000;
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch {} }
+      setPickedCard(cardId);
+    }, LONG_PRESS_MS);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onEnd);
+    document.addEventListener('pointercancel', onEnd);
+  }
+
   function bindTaskBoardEvents(container) {
     container.querySelector('[data-board-back-calendar]')?.addEventListener('click', () => setWorkspaceMode('calendar'));
     container.querySelector('#task-board-new-card-btn')?.addEventListener('click', () => openTaskCardDialog(null, 'todo'));
-    container.querySelector('#cancel-picked-card-btn')?.addEventListener('click', () => setPickedCard(null));
 
     container.querySelectorAll('[data-add-col-card]').forEach(btn => {
       btn.addEventListener('click', () => openTaskCardDialog(null, btn.dataset.addColCard));
@@ -705,14 +751,24 @@ export function createBoardAndInboxController({
     // Whole sticky note: pointer drag (mouse/pen anywhere, touch via ✋ handle)
     if (!boardReadOnly) {
       container.querySelectorAll('.task-card').forEach(cardEl => {
-        cardEl.addEventListener('pointerdown', e => startPointerDrag(e, cardEl));
+        cardEl.addEventListener('pointerdown', e => { startLongPress(e, cardEl); startPointerDrag(e, cardEl); });
+        cardEl.addEventListener('contextmenu', e => { if (e.pointerType === 'touch' || pickedCardId) e.preventDefault(); });
       });
     }
 
-    // Handles: keyboard Grab-Move-Drop
-    container.querySelectorAll('[data-task-handle]').forEach(handle => {
-      handle.addEventListener('keydown', async e => {
-        const cardId = handle.dataset.taskHandle;
+    // Keyboard on a focused card: Enter edits, Space picks / drops, arrows move the picked card
+    container.querySelectorAll('.task-card').forEach(cardEl => {
+      cardEl.addEventListener('keydown', async e => {
+        if (e.target !== cardEl) return;
+        const cardId = cardEl.dataset.taskId;
+        const card = boardCards.find(c => c.id === cardId);
+        if (!card) return;
+        if (e.key === 'Enter' && pickedCardId !== cardId) {
+          e.preventDefault();
+          openTaskCardDialog(card, card.status);
+          return;
+        }
+        if (boardReadOnly) return;
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault();
           setPickedCard(pickedCardId === cardId ? null : cardId, true);
@@ -726,8 +782,6 @@ export function createBoardAndInboxController({
           announceBoard(getLocale() === 'en' ? 'Move cancelled.' : '카드 이동을 취소했어요.');
           return;
         }
-        const card = boardCards.find(c => c.id === cardId);
-        if (!card) return;
         const colIdx = TASK_COLUMNS.findIndex(c => c.id === card.status);
         if (e.key === 'ArrowRight' && colIdx < TASK_COLUMNS.length - 1) {
           e.preventDefault();
@@ -749,46 +803,22 @@ export function createBoardAndInboxController({
           }
         }
       });
-    });
 
-    // Edit button opens the editor (never picks)
-    container.querySelectorAll('[data-task-edit]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        if (pickedCardId) setPickedCard(null);
-        const card = boardCards.find(c => c.id === btn.dataset.taskEdit);
-        if (card) openTaskCardDialog(card, card.status);
-      });
-    });
-
-    // Clicking a sticky note: pick it up / put it down / drop the picked note before it
-    container.querySelectorAll('.task-card').forEach(cardEl => {
-      cardEl.addEventListener('click', async e => {
+      // One click edits the card; while another card is picked, a click drops the picked card here
+      cardEl.addEventListener('click', async () => {
         if (Date.now() < suppressCardClickUntil) return;
         const targetId = cardEl.dataset.taskId;
-        if (boardReadOnly) {
-          const card = boardCards.find(c => c.id === targetId);
-          if (card) openTaskCardDialog(card, card.status);
-          return;
-        }
-        // Keyboard activation of the handle is handled by its keydown listener
-        if (e.detail === 0 && e.target.closest('[data-task-handle]')) return;
-        if (!pickedCardId) {
-          setPickedCard(targetId, true);
+        const targetCard = boardCards.find(c => c.id === targetId);
+        if (!targetCard) return;
+        if (!pickedCardId || boardReadOnly) {
+          openTaskCardDialog(targetCard, targetCard.status);
           return;
         }
         if (pickedCardId === targetId) {
           setPickedCard(null, true);
           return;
         }
-        const targetCard = boardCards.find(c => c.id === targetId);
-        if (targetCard) await placePickedCard(targetCard.status, targetCard.id);
-      });
-      cardEl.addEventListener('dblclick', e => {
-        if (e.target.closest('[data-task-edit]')) return;
-        if (pickedCardId) setPickedCard(null);
-        const card = boardCards.find(c => c.id === cardEl.dataset.taskId);
-        if (card) openTaskCardDialog(card, card.status);
+        await placePickedCard(targetCard.status, targetCard.id);
       });
     });
 
@@ -838,6 +868,13 @@ export function createBoardAndInboxController({
         ? (en ? 'Edit Card' : '카드 수정')
         : (en ? 'New Task Card' : '새 카드 만들기');
 
+    if (card?.task_no) {
+      const badge = document.createElement('span');
+      badge.className = 'task-key-badge';
+      badge.textContent = taskKeyOf(card);
+      $('#task-card-dialog-title').append(badge);
+    }
+
     form.elements.title.value = card?.title || '';
     form.elements.status.value = card?.status || defaultStatus;
     form.elements.description.value = card?.description || '';
@@ -864,6 +901,76 @@ export function createBoardAndInboxController({
     dlg.showModal();
   }
 
+  // "@" autocomplete for calendar members inside the card title / memo
+  let mentionMenu = null;
+  function closeMentionMenu() {
+    mentionMenu?.remove();
+    mentionMenu = null;
+  }
+  function bindMentionAutocomplete(field) {
+    if (!field || field.dataset.mentionBound === 'true') return;
+    field.dataset.mentionBound = 'true';
+    let matches = [];
+    let active = 0;
+    let range = null;
+
+    const choose = member => {
+      if (!range) return;
+      const before = field.value.slice(0, range.start);
+      const after = field.value.slice(range.end);
+      field.value = `${before}@${member.name} ${after}`;
+      const caret = (before + '@' + member.name + ' ').length;
+      field.setSelectionRange(caret, caret);
+      closeMentionMenu();
+      field.focus();
+    };
+    const paint = () => {
+      if (!mentionMenu) {
+        mentionMenu = document.createElement('div');
+        mentionMenu.className = 'mention-menu';
+        mentionMenu.setAttribute('role', 'listbox');
+        mentionMenu.addEventListener('mousedown', e => e.preventDefault());
+        field.closest('dialog')?.append(mentionMenu);
+      }
+      mentionMenu.dataset.owner = field.name;
+      const r = field.getBoundingClientRect();
+      mentionMenu.style.left = `${Math.round(r.left)}px`;
+      mentionMenu.style.top = `${Math.round(r.bottom + 4)}px`;
+      mentionMenu.innerHTML = matches.map((m, i) => `<button type="button" role="option" aria-selected="${i === active}" data-mention-idx="${i}"><span class="task-mini-avatar" aria-hidden="true">${esc(m.name.slice(0, 1))}</span>${esc(m.name)}</button>`).join('');
+      mentionMenu.querySelectorAll('[data-mention-idx]').forEach(btn => btn.addEventListener('click', () => choose(matches[+btn.dataset.mentionIdx])));
+    };
+    const refresh = () => {
+      const caret = field.selectionStart ?? field.value.length;
+      const upto = field.value.slice(0, caret);
+      const m = upto.match(/(^|[\s(])@([^\s@]{0,20})$/u);
+      if (!m || field.disabled) { closeMentionMenu(); return; }
+      const q = m[2].toLowerCase();
+      matches = boardMembers.filter(x => x.name.toLowerCase().includes(q)).slice(0, 6);
+      if (!matches.length) { closeMentionMenu(); return; }
+      range = { start: caret - m[2].length - 1, end: caret };
+      active = Math.min(active, matches.length - 1);
+      paint();
+    };
+    field.addEventListener('input', () => { active = 0; refresh(); });
+    field.addEventListener('click', refresh);
+    field.addEventListener('blur', () => setTimeout(() => { if (mentionMenu?.dataset.owner === field.name) closeMentionMenu(); }, 120));
+    field.addEventListener('keydown', e => {
+      if (!mentionMenu) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        active = (active + (e.key === 'ArrowDown' ? 1 : matches.length - 1)) % matches.length;
+        paint();
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        choose(matches[active]);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMentionMenu();
+      }
+    });
+  }
+
   async function saveTaskCard(cardId, payload) {
     const cal = getCurrentCalendar();
     if (!cal) return;
@@ -884,6 +991,7 @@ export function createBoardAndInboxController({
           due_date: payload.due_date || '',
           assignee_id: null,
           assignee_name: '',
+          task_no: boardCards.reduce((m, c) => Math.max(m, c.task_no || 0), 0) + 1,
           sort_order: maxOrder + 10,
         });
       }
@@ -906,6 +1014,9 @@ export function createBoardAndInboxController({
     if (!dlg || !form || dlg.dataset.listenersReady === 'true') return;
     dlg.dataset.listenersReady = 'true';
     attachDialogLightDismissFallback(dlg);
+    bindMentionAutocomplete(form.elements.title);
+    bindMentionAutocomplete(form.elements.description);
+    dlg.addEventListener('close', closeMentionMenu);
 
     form.addEventListener('submit', async e => {
       e.preventDefault();
@@ -1118,6 +1229,7 @@ export function createBoardAndInboxController({
         ${expanded ? `<div class="inbox-item-detail">
           <div class="inbox-full-body">${esc(m.body)}</div>
           <div class="inbox-item-actions">
+            ${m.link ? `<button type="button" class="primary small-btn inbox-link-btn" data-msg-link="${esc(m.id)}">${en ? 'Open on Task Board →' : 'Task Board에서 보기 →'}</button>` : ''}
             ${!isSent ? `<button type="button" class="secondary small-btn" data-msg-reply="${esc(m.sender_id)}" data-msg-reply-name="${esc(m.peer_name)}">${en ? 'Reply' : '답장하기'}</button>` : ''}
             <button type="button" class="text-button danger" data-msg-delete="${esc(m.id)}">${en ? 'Delete' : '삭제'}</button>
           </div>
@@ -1156,6 +1268,21 @@ export function createBoardAndInboxController({
             .catch(() => {});
         }
         renderInboxMessages();
+        return;
+      }
+
+      const linkBtn = e.target.closest('[data-msg-link]');
+      if (linkBtn) {
+        const msg = inboxMessages.find(m => m.id === linkBtn.dataset.msgLink);
+        try {
+          const u = new URL(msg?.link || '', location.origin);
+          const calendarId = u.searchParams.get('calendar');
+          const taskId = u.searchParams.get('task');
+          if (u.origin === location.origin && calendarId && taskId) {
+            dlg.close();
+            await openTaskLink(calendarId, taskId);
+          }
+        } catch {}
         return;
       }
 
@@ -1238,6 +1365,23 @@ export function createBoardAndInboxController({
     });
   }
 
+  // Jump from a message / shared link straight to a card: switch to the board, scroll to it, pulse it.
+  async function openTaskFromLink(taskId) {
+    await setWorkspaceMode('board');
+    const card = boardCards.find(c => c.id === taskId || taskKeyOf(c) === taskId);
+    const en = getLocale() === 'en';
+    if (!card) {
+      toast(en ? 'That card no longer exists.' : '카드를 찾을 수 없어요. 삭제되었을 수 있어요.');
+      return;
+    }
+    const el = document.querySelector(`.task-card[data-task-id="${CSS.escape(card.id)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    el.classList.add('is-linked-highlight');
+    el.focus({ preventScroll: true });
+    setTimeout(() => el.classList.remove('is-linked-highlight'), 3600);
+  }
+
   function handleIncomingInboxEvent(rawData) {
     let data = {};
     try { data = JSON.parse(rawData || '{}'); } catch {}
@@ -1267,6 +1411,7 @@ export function createBoardAndInboxController({
     updateUnreadBadges,
     handleIncomingInboxEvent,
     handleTasksStreamEvent,
+    openTaskFromLink,
     getUnreadCount: () => unreadCount,
   };
 }
