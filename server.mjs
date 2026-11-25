@@ -21,6 +21,18 @@ import {
   revokeCalendarIcalFeed,
   loadCalendarEventsByFeedToken
 } from './account-and-feeds.mjs';
+import {
+  listMessageContacts,
+  listDirectMessages,
+  sendDirectMessage,
+  markDirectMessageRead,
+  deleteDirectMessage,
+  listTaskBoardCards,
+  createTaskBoardCard,
+  updateTaskBoardCard,
+  reorderTaskBoardCards,
+  deleteTaskBoardCard
+} from './messages-and-tasks.mjs';
 import { formatIcsCalendar } from './ical.mjs';
 import {
   getVapidPublicKey,
@@ -1270,6 +1282,37 @@ async function handleRequest(req,res){
   }
  }
 
+ if (p === '/api/messages' && req.method === 'GET') {
+  const box = url.searchParams.get('box') === 'sent' ? 'sent' : 'inbox';
+  return json(await listDirectMessages({ all, one, userId: user.id, box }));
+ }
+ if (p === '/api/messages/contacts' && req.method === 'GET') {
+  const contacts = await listMessageContacts({ all, userId: user.id });
+  return json({ contacts });
+ }
+ if (p === '/api/messages' && req.method === 'POST') {
+  const b = await body(req);
+  const created = await sendDirectMessage({
+   one,
+   run,
+   sender: user,
+   recipientId: b.recipientId,
+   recipientEmail: b.recipientEmail,
+   body: b.body,
+   clients,
+   sendPush: sendPushToUser
+  });
+  return json(created, 201);
+ }
+ if (p === '/api/messages/read' && req.method === 'POST') {
+  const b = await body(req);
+  return json(await markDirectMessageRead({ run, one, userId: user.id, messageId: b.messageId }));
+ }
+ const msgDelMatch = p.match(/^\/api\/messages\/([\w-]+)$/);
+ if (msgDelMatch && req.method === 'DELETE') {
+  return json(await deleteDirectMessage({ one, run, userId: user.id, messageId: msgDelMatch[1] }));
+ }
+
  const pollConfirmMatch = p.match(/^\/api\/polls\/([^/]+)\/confirm$/);
  if (pollConfirmMatch && req.method === 'POST') {
   const pollId = pollConfirmMatch[1];
@@ -1417,8 +1460,40 @@ async function handleRequest(req,res){
    }
    return json({ok:true});
   }
- const route=p.match(/^\/api\/calendars\/([\w-]+)\/(events|monthly-items|stream|invites|details|settings|members|access|administrator|notes|month-notes|activities|polls|ical-feed)(?:\/([\w-]+))?$/);
+ const route=p.match(/^\/api\/calendars\/([\w-]+)\/(events|monthly-items|stream|invites|details|settings|members|access|administrator|notes|month-notes|activities|polls|ical-feed|tasks)(?:\/([\w-]+))?$/);
  if(!route)fail(404,'경로를 찾을 수 없습니다.');const [,ident,kind,eventId]=route;const m=await member(ident,user);const id=m.id,role=m.role;
+ if(kind==='tasks'){
+  if(req.method==='GET'){
+   const readOnlyRow=await one("SELECT 1 FROM calendars c WHERE c.id=$1 AND (c.source_provider='google' OR EXISTS(SELECT 1 FROM external_calendars ec WHERE ec.calendar_id=c.id AND (ec.is_read_only OR ec.sync_direction='read_only')))",id);
+   const data=await listTaskBoardCards({all,calendarId:id});
+   return json({...data,readOnly:role==='viewer'||Boolean(readOnlyRow)});
+  }
+  await writeAccess(id,user);
+  if(req.method==='POST'&&eventId==='reorder'){
+   const b=await body(req);
+   const saved=await reorderTaskBoardCards({transaction,calendarId:id,userId:user.id,status:b.status,orderedIds:b.orderedIds,movedId:b.movedId});
+   broadcast(id,'tasks');
+   return json(saved);
+  }
+  if(req.method==='POST'&&!eventId){
+   const b=await body(req);
+   const created=await createTaskBoardCard({one,calendarId:id,userId:user.id,payload:b});
+   broadcast(id,'tasks');
+   return json(created,201);
+  }
+  if(req.method==='PUT'&&eventId){
+   const b=await body(req);
+   const updated=await updateTaskBoardCard({one,calendarId:id,taskId:eventId,userId:user.id,payload:b});
+   broadcast(id,'tasks');
+   return json(updated);
+  }
+  if(req.method==='DELETE'&&eventId){
+   const deleted=await deleteTaskBoardCard({run,calendarId:id,taskId:eventId});
+   broadcast(id,'tasks');
+   return json(deleted);
+  }
+  fail(405,'허용되지 않은 요청입니다.');
+ }
  if(kind==='monthly-items'){
   const validMonth=value=>typeof value==='string'&&/^(?!0000)[0-9]{4}-(0[1-9]|1[0-2])$/.test(value);
   if(req.method==='GET'){

@@ -8,6 +8,7 @@ const assets = new Map([
  ['/app.js', 'text/javascript; charset=utf-8'],
  ['/sandbox.js', 'text/javascript; charset=utf-8'],
  ['/quick-add.js', 'text/javascript; charset=utf-8'],
+ ['/board-and-inbox.js', 'text/javascript; charset=utf-8'],
  ['/event-utils.js', 'text/javascript; charset=utf-8'],
  ['/lunar.js', 'text/javascript; charset=utf-8'],
  ['/weather.js', 'text/javascript; charset=utf-8'],
@@ -45,7 +46,7 @@ export function servePublicPage(req, res, pathname, appOrigin, metaOverride = nu
  if (pathname === '/terms' || pathname === '/terms/') { res.setHeader('Location', '/terms.html?v=20261013-oauth-v2'); return send('text/plain; charset=utf-8', 'Redirecting', 'no-store', 301); }
  if (assets.has(pathname)) return send(assets.get(pathname), publicFile(pathname), ['/privacy.html','/terms.html','/sw.js'].includes(pathname)?'no-store':'public, max-age=3600');
  if (pathname === '/robots.txt') {
-  return send('text/plain; charset=utf-8', `User-agent: *\nAllow: /$\nAllow: /en/$\nAllow: /ko/$\nAllow: /privacy.html$\nAllow: /terms.html$\nAllow: /locale.js\nAllow: /translations.js\nAllow: /app.en.js\nAllow: /app.js\nAllow: /sandbox.js\nAllow: /quick-add.js\nAllow: /sw.js\nAllow: /event-utils.js\nAllow: /holidays.js\nAllow: /lunar.js\nAllow: /weather.js\nAllow: /style.css\nAllow: /icons/\nAllow: /favicon\nAllow: /og-image.png\nAllow: /manifest.webmanifest\nDisallow: /\n\nSitemap: ${origin}/sitemap.xml\n`, 'public, max-age=3600');
+  return send('text/plain; charset=utf-8', `User-agent: *\nAllow: /$\nAllow: /en/$\nAllow: /ko/$\nAllow: /privacy.html$\nAllow: /terms.html$\nAllow: /locale.js\nAllow: /translations.js\nAllow: /app.en.js\nAllow: /app.js\nAllow: /sandbox.js\nAllow: /quick-add.js\nAllow: /board-and-inbox.js\nAllow: /sw.js\nAllow: /event-utils.js\nAllow: /holidays.js\nAllow: /lunar.js\nAllow: /weather.js\nAllow: /style.css\nAllow: /icons/\nAllow: /favicon\nAllow: /og-image.png\nAllow: /manifest.webmanifest\nDisallow: /\n\nSitemap: ${origin}/sitemap.xml\n`, 'public, max-age=3600');
  }
  if (pathname === '/sitemap.xml') {
   const languageLinks=`<xhtml:link rel="alternate" hreflang="ko" href="${escapeHTML(origin)}/ko/"/><xhtml:link rel="alternate" hreflang="en" href="${escapeHTML(origin)}/en/"/><xhtml:link rel="alternate" hreflang="x-default" href="${escapeHTML(origin)}/"/>`;

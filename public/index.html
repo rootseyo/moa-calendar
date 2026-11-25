@@ -37,8 +37,8 @@
 <meta name="twitter:description" content="링크 하나로 초대하고 실시간으로 일정을 공유하세요.">
 <meta name="twitter:image" content="__SITE_URL__/og-image.png">
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"__SITE_URL__/#website","url":"__SITE_URL__/","name":"모아 캘린더","inLanguage":"ko"},{"@type":"WebApplication","name":"모아 캘린더","url":"__SITE_URL__/","applicationCategory":"ProductivityApplication","operatingSystem":"Web","inLanguage":"ko","description":"가족, 친구, 팀과 초대 링크로 참여하고 실시간으로 일정을 공유하는 캘린더"}]}</script>
-<link rel="stylesheet" href="/style.css?v=20261125-growth-v2">
-<script type="module" src="/locale.js?v=20261125-growth-v2"></script>
+<link rel="stylesheet" href="/style.css?v=20261125-board-inbox-v1">
+<script type="module" src="/locale.js?v=20261125-board-inbox-v1"></script>
 <script defer src="/analytics.js?v=20261028-csp-v1"></script>
 </head>
 <body><div id="app"><div class="workspace" id="workspace-root"><aside class="sidebar" id="main-sidebar" aria-label="캘린더 메뉴"><div class="sidebar-content" id="sidebar-content"><a class="brand sidebar-brand" href="/"><span class="brand-mark">m</span><span class="sidebar-brand-name">모아</span></a><button class="primary full" id="new-event" disabled>＋ 일정 만들기</button><div class="nav-caption">MY SPACE</div><div class="nav-active">▦ <span>공유 캘린더</span></div><div class="calendar-heading"><span>내 캘린더</span></div><div id="calendar-list"><div class="calendar-item active"><span class="dot"></span><span>내 캘린더</span></div></div></div></aside><main class="main"><header class="topbar"><div class="calendar-title-group"><h1 class="calendar-title">내 캘린더</h1></div></header><div class="workspace-body"><section class="calendar-section"><div class="calendar-toolbar"><div class="month-heading"><h2 id="month-title"></h2></div><div class="calendar-view-controls"><button class="today-button" id="today">오늘</button><div class="view-mode-group" role="tablist" aria-label="캘린더 보기 형식"><button class="view-btn" data-view="day">일간</button><button class="view-btn" data-view="week">주간</button><button class="view-btn active" data-view="month">월간</button></div></div></div><div class="calendar-meta"><span id="sync-status" role="status">캘린더 연결 중...</span></div><div id="calendar"><div class="weekdays"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div class="month-grid"><div class="day outside"><div class="day-number"></div></div><div class="day outside"><div class="day-number"></div></div><div class="day outside"><div class="day-number"></div></div><div class="day"><div class="day-number">1</div></div><div class="day"><div class="day-number">2</div></div><div class="day"><div class="day-number">3</div></div><div class="day"><div class="day-number">4</div></div><div class="day"><div class="day-number">5</div></div><div class="day"><div class="day-number">6</div></div><div class="day"><div class="day-number">7</div></div><div class="day"><div class="day-number">8</div></div><div class="day"><div class="day-number">9</div></div><div class="day"><div class="day-number">10</div></div><div class="day"><div class="day-number">11</div></div><div class="day"><div class="day-number">12</div></div><div class="day"><div class="day-number">13</div></div><div class="day"><div class="day-number">14</div></div><div class="day"><div class="day-number">15</div></div><div class="day"><div class="day-number">16</div></div><div class="day"><div class="day-number">17</div></div><div class="day"><div class="day-number">18</div></div><div class="day"><div class="day-number">19</div></div><div class="day"><div class="day-number">20</div></div><div class="day"><div class="day-number">21</div></div><div class="day"><div class="day-number">22</div></div><div class="day"><div class="day-number">23</div></div><div class="day"><div class="day-number">24</div></div><div class="day"><div class="day-number">25</div></div><div class="day"><div class="day-number">26</div></div><div class="day"><div class="day-number">27</div></div><div class="day"><div class="day-number">28</div></div><div class="day"><div class="day-number">29</div></div><div class="day"><div class="day-number">30</div></div><div class="day"><div class="day-number">31</div></div><div class="day outside"><div class="day-number"></div></div></div></div></section><aside class="right-panel" id="details-panel" aria-label="캘린더 정보"><section class="agenda"><div class="section-title"><h3 id="agenda-date">오늘의 일정</h3></div><div id="agenda-list"><div class="empty-agenda"><span class="empty-icon">▦</span><p>일정을 불러오는 중입니다...</p></div></div></section></aside></div></main></div><noscript><p>로그인하고 캘린더를 사용하려면 브라우저에서 자바스크립트를 활성화해 주세요.</p></noscript></div><div id="toast" role="status" aria-live="polite"></div>
@@ -488,5 +488,102 @@
   <h3>이 캘린더의 투표</h3>
   <div id="poll-list" class="poll-list"></div>
  </section>
+</dialog>
+<dialog id="inbox-dialog" closedby="any" aria-labelledby="inbox-dialog-title">
+ <div class="dialog-heading">
+  <div>
+   <span class="eyebrow">MESSAGES</span>
+   <h1 id="inbox-dialog-title" class="dialog-h1">쪽지함</h1>
+  </div>
+  <button type="button" class="icon close" aria-label="닫기">✕</button>
+ </div>
+ <div class="inbox-tabs-bar">
+  <div class="schedule-share-tabs inbox-tabs" role="tablist" aria-label="쪽지함 메뉴">
+   <button type="button" class="schedule-tab-btn active" data-inbox-tab="inbox" role="tab" aria-selected="true">받은 쪽지함 <span class="inbox-unread-badge" data-inbox-unread-badge hidden>0</span></button>
+   <button type="button" class="schedule-tab-btn" data-inbox-tab="sent" role="tab" aria-selected="false">보낸 쪽지함</button>
+   <button type="button" class="schedule-tab-btn" data-inbox-tab="compose" role="tab" aria-selected="false">＋ 쪽지 보내기</button>
+  </div>
+  <button type="button" class="text-button small" id="inbox-mark-all-read-btn" hidden>모두 읽음</button>
+ </div>
+ <div id="inbox-list-panel" class="inbox-list-panel">
+  <div id="inbox-messages-list" class="inbox-messages-list" role="region" aria-label="쪽지 목록"></div>
+ </div>
+ <div id="inbox-compose-panel" class="inbox-compose-panel" hidden>
+  <form id="inbox-compose-form" autocomplete="off">
+   <label for="inbox-recipient-select">받는 사람
+    <select id="inbox-recipient-select" required></select>
+   </label>
+   <label id="inbox-recipient-email-wrap" for="inbox-recipient-email" hidden>받는 사람 이메일 주소
+    <input type="email" id="inbox-recipient-email" maxlength="254" placeholder="name@example.com">
+   </label>
+   <label for="inbox-body-input">쪽지 내용
+    <textarea id="inbox-body-input" rows="5" maxlength="2000" required placeholder="함께 쓰는 멤버나 다른 사용자에게 전할 메시지를 적어주세요."></textarea>
+   </label>
+   <div class="feedback-message-meta">
+    <span class="small muted">상대방이 접속 중이면 실시간으로 알림이 전달돼요.</span>
+    <span id="inbox-char-count" class="small muted">0 / 2,000</span>
+   </div>
+   <p id="inbox-compose-error" class="form-error" role="alert"></p>
+   <div class="dialog-actions">
+    <button type="button" class="secondary close">닫기</button>
+    <button type="submit" class="primary" id="inbox-send-btn">쪽지 보내기</button>
+   </div>
+  </form>
+ </div>
+</dialog>
+<dialog id="task-card-dialog" closedby="any" aria-labelledby="task-card-dialog-title">
+ <form id="task-card-form">
+  <div class="dialog-heading">
+   <div>
+    <span class="eyebrow">TASK BOARD</span>
+    <h1 id="task-card-dialog-title" class="dialog-h1">새 카드 만들기</h1>
+   </div>
+   <button type="button" class="icon close" aria-label="닫기">✕</button>
+  </div>
+  <label>카드 제목
+   <input name="title" maxlength="120" required autofocus placeholder="예: 항공권 예약하기, 발표 자료 초안">
+  </label>
+  <div class="form-row">
+   <label>진행 상태
+    <select name="status">
+     <option value="todo">할 일</option>
+     <option value="in_progress">진행 중</option>
+     <option value="done">완료</option>
+    </select>
+   </label>
+   <label>담당자
+    <select name="assignee_id" id="task-card-assignee">
+     <option value="">담당자 없음</option>
+    </select>
+   </label>
+  </div>
+  <label>마감일 (선택)
+   <input type="date" name="due_date">
+  </label>
+  <fieldset class="event-color-picker"><legend>카드 색상</legend><div class="event-color-options">
+   <label class="event-color-option" title="초록색"><input class="sr-only" type="radio" name="color" value="sage" aria-label="초록색" checked><span class="event-color-swatch sage" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="파란색"><input class="sr-only" type="radio" name="color" value="blue" aria-label="파란색"><span class="event-color-swatch blue" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="살구색"><input class="sr-only" type="radio" name="color" value="peach" aria-label="살구색"><span class="event-color-swatch peach" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="보라색"><input class="sr-only" type="radio" name="color" value="lavender" aria-label="보라색"><span class="event-color-swatch lavender" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="빨간색"><input class="sr-only" type="radio" name="color" value="coral" aria-label="빨간색"><span class="event-color-swatch coral" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="분홍색"><input class="sr-only" type="radio" name="color" value="rose" aria-label="분홍색"><span class="event-color-swatch rose" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="노란색"><input class="sr-only" type="radio" name="color" value="yellow" aria-label="노란색"><span class="event-color-swatch yellow" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="민트색"><input class="sr-only" type="radio" name="color" value="teal" aria-label="민트색"><span class="event-color-swatch teal" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="주황색"><input class="sr-only" type="radio" name="color" value="orange" aria-label="주황색"><span class="event-color-swatch orange" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="하늘색"><input class="sr-only" type="radio" name="color" value="cyan" aria-label="하늘색"><span class="event-color-swatch cyan" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="남색"><input class="sr-only" type="radio" name="color" value="indigo" aria-label="남색"><span class="event-color-swatch indigo" aria-hidden="true"></span></label>
+   <label class="event-color-option" title="회색"><input class="sr-only" type="radio" name="color" value="slate" aria-label="회색"><span class="event-color-swatch slate" aria-hidden="true"></span></label>
+  </div></fieldset>
+  <label>상세 메모
+   <textarea name="description" rows="4" maxlength="2000" placeholder="진행 내용이나 참고 링크를 적어주세요."></textarea>
+  </label>
+  <p id="task-card-error" class="form-error" role="alert"></p>
+  <div class="dialog-actions">
+   <div class="event-secondary-actions">
+    <button type="button" class="danger" id="delete-task-card-btn" hidden>카드 삭제</button>
+   </div>
+   <button type="submit" class="primary" id="save-task-card-btn">카드 저장</button>
+  </div>
+ </form>
 </dialog>
 </body></html>

@@ -1,4 +1,4 @@
-import { translateSource, translateError } from './translations.js?v=20261125-growth-v1';
+import { translateSource, translateError } from './translations.js?v=20261125-board-inbox-v1';
 
 // Apply saved color-scheme preference immediately before first paint (CSP-safe, no inline script).
 export function applyColorScheme(value){
@@ -98,7 +98,7 @@ document.addEventListener('change',event=>{
  }
 });
 // Do not await: app.js imports this module for locale helpers.
-import(locale==='en'?'/app.en.js?v=20261125-growth-v2':'/app.js?v=20261125-growth-v2').catch(error=>{
+import(locale==='en'?'/app.en.js?v=20261125-board-inbox-v1':'/app.js?v=20261125-board-inbox-v1').catch(error=>{
  const app=document.querySelector('#app');
  app.replaceChildren();
  const wrap=document.createElement('main');wrap.className='loading';

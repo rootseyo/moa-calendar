@@ -1,6 +1,6 @@
 // Moa Calendar Service Worker: Web Push Notifications + Offline Read PWA Cache
 
-const STATIC_CACHE = 'moa-static-v4';
+const STATIC_CACHE = 'moa-static-v5';
 const API_CACHE = 'moa-api-v1';
 const PRECACHE_URLS = [
   '/',

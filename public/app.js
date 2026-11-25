@@ -1,11 +1,12 @@
-import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261125-growth-v2';
-import { english } from './translations.js?v=20261125-growth-v1';
-import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261125-growth-v1';
+import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261125-board-inbox-v1';
+import { english } from './translations.js?v=20261125-board-inbox-v1';
+import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261125-board-inbox-v1';
 import { getHoliday, getActiveRegion, getRegionName } from './holidays.js?v=20261028-instant-calendar-v1';
 import { formatKoreanLunarDate, getKoreanLunarDate } from './lunar.js?v=20261028-instant-calendar-v1';
 import { WEATHER_PRESET_LOCATIONS, parseOpenMeteoDaily, renderWeatherBadgeHtml, renderHourlyWeatherItemsHtml, getSavedWeatherLocation, saveWeatherLocation, isWeatherEnabled, setWeatherEnabled, getWeatherLocationDisplayName, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl } from './weather.js?v=20261028-cancel-v1';
-import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261123-phase1-v1';
+import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261125-board-inbox-v1';
 import { parseQuickAddInput, buildMapUrls } from './quick-add.js?v=20261124-phase2-v1';
+import { createBoardAndInboxController } from './board-and-inbox.js?v=20261125-board-inbox-v1';
 const $ = s=>document.querySelector(s);
 const app=$('#app');
 const mobileCalendar=window.matchMedia('(max-width:600px)');
@@ -15,6 +16,17 @@ mobileCalendar.addEventListener('change',()=>{
 let deletingCalendarId=null;
 let me={providers:{kakao:true,google:true}}, calendars=[], current, events=[], connection, sessions=[], connected=false, editing=null;
 let sandboxMode=false, sandboxStore=null;
+const boardInbox=typeof createBoardAndInboxController==='function'?createBoardAndInboxController({
+ api:(p,m,b)=>api(p,m,b),
+ toast:msg=>toast(msg),
+ getLocale:()=>locale,
+ tr:msg=>tr(msg),
+ getCurrentCalendar:()=>current,
+ isCalendarReadOnly:cal=>calendarIsReadOnly(cal),
+ isSandboxMode:()=>sandboxMode,
+ getMe:()=>me,
+ exitSandboxToLogin:()=>exitSandboxToLogin()
+}):{getWorkspaceMode:()=>'calendar',setWorkspaceMode:()=>{},syncWorkspaceModeUI:()=>{},loadTaskBoard:async()=>{},initTaskCardDialogListeners:()=>{},openInboxDialog:()=>{},refreshUnreadCount:()=>{},handleIncomingInboxEvent:()=>{},handleTasksStreamEvent:()=>{},getUnreadCount:()=>0};
 function trackFunnel(eventName,meta){
  try{window.MoaAnalytics?.track(eventName,meta);}catch{}
 }
@@ -343,6 +355,7 @@ async function boot(){
   renderShell();
   renderCalendar();
   loadWeatherForecast();
+  boardInbox.refreshUnreadCount();
   if(current)selectCalendar(current.slug||current.id,false);
   handleWidgetUrlParams();
   if(isSettingsRoute())restoreSettingsRoute();
@@ -774,7 +787,11 @@ function renderShell(){
    <button class="secondary full schedule-share-trigger-btn" id="open-schedule-share-btn" type="button"><span aria-hidden="true">↗</span> 일정 공유 링크</button>
    <button class="secondary full schedule-share-trigger-btn" id="open-poll-btn" type="button"><span aria-hidden="true">🗳️</span> 약속 시간 투표</button>
    <div class="nav-caption">MY SPACE</div>
-   <div class="nav-active">▦ <span>공유 캘린더</span></div>
+   <div class="sidebar-space-nav" role="group" aria-label="작업 공간 전환">
+    <button type="button" class="sidebar-space-btn ${boardInbox.getWorkspaceMode()==='calendar'?'nav-active active':''}" data-workspace-mode="calendar" aria-pressed="${boardInbox.getWorkspaceMode()==='calendar'}"><span aria-hidden="true">▦</span> <span>공유 캘린더</span></button>
+    <button type="button" class="sidebar-space-btn ${boardInbox.getWorkspaceMode()==='board'?'nav-active active':''}" data-workspace-mode="board" aria-pressed="${boardInbox.getWorkspaceMode()==='board'}"><span aria-hidden="true">▤</span> <span>Task Board</span></button>
+    <button type="button" class="sidebar-space-btn sidebar-inbox-btn" id="open-inbox-sidebar-btn"><span aria-hidden="true">✉</span> <span>쪽지함</span><span class="inbox-unread-badge" data-inbox-unread-badge ${boardInbox.getUnreadCount()>0?'':'hidden'}>${boardInbox.getUnreadCount()}</span></button>
+   </div>
    <div class="calendar-heading"><span>내 캘린더 <span class="calendar-count-badge" id="cal-count-badge">${selectedCalendarIds.size}/${calendars.length}</span></span><button class="icon" id="new-calendar" aria-label="새 캘린더 만들기"><span aria-hidden="true">＋</span><span class="calendar-create-label">새 캘린더 만들기</span></button></div>
    <div id="calendar-list">${renderCalendarListItems(false)}</div>
    <div class="sidebar-notes" id="sidebar-notes">
@@ -793,6 +810,8 @@ function renderShell(){
      <h1 class="calendar-title" title="${esc(getCalendarTitle())}">${esc(getCalendarTitle())}</h1>
     </div>
     <div class="topbar-actions">
+     <button type="button" class="topbar-board-toggle ${boardInbox.getWorkspaceMode()==='board'?'active':''}" id="topbar-board-toggle" aria-pressed="${boardInbox.getWorkspaceMode()==='board'}" title="Task Board"><span aria-hidden="true">▤</span> <span>Task Board</span></button>
+     <button type="button" class="topbar-inbox-trigger" id="topbar-inbox-trigger" aria-label="쪽지함" title="쪽지함"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 6.5 8.5 6 8.5-6"/></svg><span class="topbar-inbox-label">쪽지함</span><span class="inbox-unread-badge" data-inbox-unread-badge ${boardInbox.getUnreadCount()>0?'':'hidden'}>${boardInbox.getUnreadCount()}</span></button>
      <button class="secondary" id="share" hidden aria-label="초대 링크 및 캘린더 주소 공유"><span aria-hidden="true">↗</span><span class="share-label-desktop">초대 / 주소 공유</span><span class="share-label-mobile">초대·공유</span></button>
      <button class="mobile-feedback-trigger" id="mobile-feedback-trigger" type="button" aria-label="기능 개선 · 버그 제보" title="기능 개선 · 버그 제보"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></button>
      <button class="mobile-search-trigger" id="mobile-search-trigger" type="button" aria-label="일정 검색" aria-controls="calendar-search" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
@@ -825,6 +844,7 @@ function renderShell(){
       <div id="quick-add-preview" class="quick-add-preview" hidden aria-live="polite"></div>
      </form>
      <div class="calendar-meta"><span id="calendar-meta-chips">${renderCalendarMetaChips()}</span><span id="sync-status" role="status">연결 중</span></div>
+     <div id="task-board-view" class="task-board-view" hidden></div>
      <div id="calendar"></div>
      <div class="calendar-footer"><span>${getCalendarFooterText()}</span></div>
     </section>
@@ -978,8 +998,20 @@ function renderShell(){
  };
 
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
+  if(boardInbox.getWorkspaceMode()==='board')boardInbox.setWorkspaceMode('calendar');
   setViewMode(b.dataset.view);
  });
+ document.querySelectorAll('.sidebar-space-btn[data-workspace-mode]').forEach(btn=>{
+  btn.onclick=()=>boardInbox.setWorkspaceMode(btn.dataset.workspaceMode);
+ });
+ if($('#topbar-board-toggle'))$('#topbar-board-toggle').onclick=()=>{
+  boardInbox.setWorkspaceMode(boardInbox.getWorkspaceMode()==='board'?'calendar':'board');
+ };
+ if($('#open-inbox-sidebar-btn'))$('#open-inbox-sidebar-btn').onclick=()=>boardInbox.openInboxDialog('inbox');
+ if($('#topbar-inbox-trigger'))$('#topbar-inbox-trigger').onclick=()=>boardInbox.openInboxDialog('inbox');
+ boardInbox.initTaskCardDialogListeners();
+ boardInbox.syncWorkspaceModeUI();
+ if(boardInbox.getWorkspaceMode()==='board')boardInbox.loadTaskBoard();
 
  renderCalendar();
 }
@@ -1033,6 +1065,7 @@ async function selectCalendar(ident,updateUrl=true){
    await loadDateNotes();
    await loadMonthNotes();
    if(typeof loadCalendarActivities==='function')loadCalendarActivities().catch(()=>{});
+   if(boardInbox.getWorkspaceMode()==='board')boardInbox.loadTaskBoard().catch(()=>{});
    renderSelectedDate();
    syncCalendarStreams();
   }catch(e){toast(e.message);}
@@ -1153,6 +1186,8 @@ function syncCalendarStreams(){
      if(typeof loadCalendarActivities==='function')loadCalendarActivities().catch(()=>{});
      if(editing&&$('#event-dialog')?.open&&typeof loadEventCollaboration==='function')loadEventCollaboration(editing.id).catch(()=>{});
     });
+    stream.addEventListener('inbox',e=>boardInbox.handleIncomingInboxEvent(e.data));
+    stream.addEventListener('tasks',()=>boardInbox.handleTasksStreamEvent());
     stream.addEventListener('profile',async()=>{
      try{const account=await api('/api/me');if(account.user?.id===me.user?.id){me.user=account.user;renderAccountName();}}catch(error){toast(error.message);}
     });
