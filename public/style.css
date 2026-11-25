@@ -221,7 +221,7 @@ dialog#event-dialog{max-height:calc(100dvh - 24px);overflow-y:auto}
  .calendar-meta>span:first-child{display:none}
  .calendar-meta #sync-status{margin-left:auto}
  .weekdays{padding:8px 0;font-size:10px}
- .day{min-height:118px;padding:3px 1px}
+ .day{min-height:64px;padding:3px 1px}
  .day-number{width:21px;height:21px;margin:0 0 3px 1px;font-size:10px}
  .week-col{padding:6px 1px;min-height:260px}
  .week-col-events{gap:3px;min-height:200px}
@@ -1829,7 +1829,7 @@ dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
 
 .topbar-board-toggle,.topbar-inbox-trigger{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--border);background:var(--surface,#fff);color:var(--text);font-size:12px;font-weight:600;position:relative}
 .topbar-board-toggle.active{background:var(--green);border-color:var(--green);color:var(--on-primary)}
-.inbox-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#d9534f;color:#fff;font-size:10.5px;font-weight:700;line-height:1}
+.inbox-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#c0392b;color:#fff;font-size:10.5px;font-weight:700;line-height:1}
 .inbox-unread-badge[hidden]{display:none!important}
 
 /* Task Board Layout */
@@ -2098,3 +2098,76 @@ html[data-boot="guest"] .boot-splash{display:flex;align-items:center;justify-con
 :root[data-theme="dark"] :is(.presence-person .avatar,#session-count){background:color-mix(in srgb,var(--green) 18%,var(--surface));color:var(--text)}
 .sidebar-notes .date-note-description{color:var(--muted)}
 .week-col:first-child .week-col-header .day-name{color:var(--sun)}
+
+/* Mobile: narrow day columns — date and weather never collide */
+@media(max-width:600px){
+ .week-col,.day{min-width:0}
+ .week-col-header .calendar-date-pair,.day .calendar-date-pair{flex-wrap:wrap;justify-content:center;gap:1px 2px;min-width:0}
+ .week-col-header .weather-rain-prob,.day .weather-rain-prob{display:none}
+ .week-col-header,.day-header-row{overflow:hidden}
+}
+
+/* Week view: stacked event cards — title gets the full column width */
+.week-col-events .event-pill{display:flex;flex-direction:column;align-items:stretch;gap:2px;height:auto;min-height:0;padding:5px 7px;white-space:normal;text-align:left;line-height:1.3}
+.week-col-events .event-pill .category-badge{display:none}
+.week-col-events .event-pill .event-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;font-size:11.5px;font-weight:650;word-break:break-all}
+.week-col-events .event-pill small{display:block;font-size:10px;opacity:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.week-col-events .event-pill .todo-check-btn{position:absolute;right:5px;top:5px}
+.week-col-events .event-pill:has(.todo-check-btn) .event-title{padding-right:16px}
+.week-col-events .event-pill{position:relative}
+@media(max-width:600px){
+ .week-col-events .event-pill{padding:4px 4px}
+ .week-col-events .event-pill .event-title{font-size:10.5px;-webkit-line-clamp:3}
+ .week-col-events .event-pill small{display:none}
+}
+
+/* Mobile: header keeps only title + search + menu; Task Board / 쪽지함 live in the bottom bar */
+@media(max-width:600px){
+ .topbar-actions .topbar-board-toggle,.topbar-actions .topbar-inbox-trigger,.topbar-actions .mobile-feedback-trigger{display:none}
+ .mobile-bottom-nav>button[aria-pressed=true]{background:color-mix(in srgb,var(--green) 12%,var(--surface))}
+ .mobile-bottom-nav>button{position:relative}
+ .mobile-nav-badge{position:absolute;top:4px;left:calc(50% + 6px);min-width:16px;height:16px;font-size:9.5px;padding:0 4px}
+}
+.settings-feedback-link{display:flex;align-items:center;gap:10px;width:100%;margin-top:14px;padding:10px 12px;border-radius:10px;border:1px dashed var(--border);color:var(--text);font-size:13px;font-weight:600;text-align:left}
+.settings-feedback-link:hover{border-color:var(--green);color:var(--green)}
+
+/* Readability & touch targets */
+.lunar-date-month,.lunar-date-week{font-size:10px}
+.nav-caption{font-size:10px;margin-top:18px}
+@media(max-width:600px){
+ .day-number{width:26px;height:26px;font-size:11.5px}
+ .day-number::after{content:"";position:absolute;inset:-6px}
+ .week-col-header .day-num::after{content:"";position:absolute;inset:-6px}
+ .lunar-date-month{font-size:9.5px}
+}
+
+/* Settings now lives in the account row (sidebar); right panel toolbar is search only */
+.right-panel-toolbar .desktop-settings-trigger{display:none}
+.sidebar-profile .sidebar-settings-trigger{margin-left:auto;color:var(--muted)}
+.sidebar-profile .sidebar-settings-trigger:hover{color:var(--green)}
+.sidebar-profile .sidebar-settings-trigger+#logout{margin-left:0}
+.month-note-section{margin-top:18px}
+
+/* D-Day chip sits beside the month title */
+.month-heading .dday-widget-bar{flex:0 1 auto;margin-left:10px;max-height:none;flex-wrap:nowrap;overflow-x:auto}
+@media(max-width:600px){.month-heading{flex-wrap:wrap}.month-heading .dday-widget-bar{margin-left:0;width:auto;flex-basis:100%}}
+
+/* Today = filled number badge only; Selected = green outline (no grey wash), so the two never look alike */
+.day.selected,.week-col.is-selected{background:color-mix(in srgb,var(--green) 6%,var(--surface));box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--green) 55%,transparent)}
+
+/* Event form: progressive disclosure */
+#event-form[data-expanded="false"] .event-advanced,
+#event-form[data-expanded="false"] .event-advanced-toggle{display:none!important}
+.event-more-toggle{display:flex;align-items:center;gap:8px;width:100%;margin:4px 0 12px;padding:10px 12px;border-radius:10px;border:1px dashed var(--border);background:transparent;color:var(--green);font-size:12.5px;font-weight:650;text-align:left}
+.event-more-toggle:hover{border-color:var(--green);background:color-mix(in srgb,var(--green) 6%,var(--surface))}
+.event-more-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:color-mix(in srgb,var(--green) 12%,var(--surface));font-weight:800}
+.event-advanced{display:flex;flex-direction:column}
+.quick-add-hint{margin:2px 2px 0;font-size:11.5px;line-height:1.5;color:var(--muted)}
+.quick-add-hint[hidden],.quick-add-hint.is-previewing{display:none}
+
+/* Toast with an action (실행 취소) */
+#toast.has-action{display:flex;align-items:center;gap:14px;pointer-events:auto;padding-right:10px}
+#toast .toast-action{flex-shrink:0;padding:6px 12px;border-radius:8px;background:rgba(255,255,255,.16);color:#fff;font-size:12.5px;font-weight:700}
+#toast .toast-action:hover{background:rgba(255,255,255,.28)}
+#toast .toast-action:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@media(max-width:600px){.quick-add-hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}

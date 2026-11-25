@@ -68,7 +68,7 @@ test('monthly and yearly repeats support solar and lunar cycles with clamped dat
  assert.throws(()=>repeatEventRanges('2026-10-20T10:00','2026-10-20T09:00',{ frequency: 'monthly', count: 2 }));
 });
 
-test('dday helpers calculate labels and reorder widgets inside toolbar between month heading and view controls', async () => {
+test('dday helpers calculate labels; D-Day chips sit beside the month title', async () => {
  assert.equal(calculateDdayDiff('2026-10-28T09:00', '2026-10-28'), 0);
  assert.equal(calculateDdayDiff('2026-11-02T14:00', '2026-10-28'), 5);
  assert.equal(calculateDdayDiff('2026-10-25T00:00', '2026-10-28'), -3);
@@ -104,7 +104,8 @@ test('dday helpers calculate labels and reorder widgets inside toolbar between m
  const monthHeadingIdx = appJs.indexOf('<div class="month-heading">', toolbarIdx);
  const viewControlsIdx = appJs.indexOf('<div class="calendar-view-controls">', toolbarIdx);
  const ddayBarIdx = appJs.indexOf('id="dday-widget-bar"', toolbarIdx);
- assert.ok(headingBlockIdx > toolbarIdx && monthHeadingIdx >= headingBlockIdx && viewControlsIdx > monthHeadingIdx && ddayBarIdx > viewControlsIdx);
+ // D-Day chips sit inside the month heading, right beside the title (before the view controls)
+ assert.ok(headingBlockIdx > toolbarIdx && monthHeadingIdx >= headingBlockIdx && ddayBarIdx > monthHeadingIdx && viewControlsIdx > ddayBarIdx);
 });
 
 test('resolveAdjustedEndDateTime only adds 1 hour when end <= start, and leaves end untouched when start < end', () => {

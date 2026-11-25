@@ -134,9 +134,9 @@ test('today date badges preserve high-contrast white text and harmonize with Sat
  assert.match(styleCss,/\.day\.is-saturday \.day-number\.is-today[^}]*color:\s*#ffffff !important/);
  assert.match(styleCss,/\.day\.is-saturday \.day-number\.is-today[^}]*font-weight:\s*700 !important/);
 
- // Weekday today badge has green background with white bold text
+ // Weekday today badge: green background with the theme's on-green text (white in light, near-black in dark — both ≥ 4.5:1)
  assert.match(styleCss,/\.day-number\.is-today,\s*\.week-col-header \.day-num\.is-today[^}]*background:\s*var\(--green\) !important/);
- assert.match(styleCss,/\.day-number\.is-today,\s*\.week-col-header \.day-num\.is-today[^}]*color:\s*#ffffff !important/);
+ assert.match(styleCss,/\.day-number\.is-today,\s*\.week-col-header \.day-num\.is-today[^}]*color:\s*var\(--on-primary\) !important/);
 });
 
 test('monthly notes section and orange indicator dot on calendar header',()=>{
@@ -167,24 +167,21 @@ test('monthly notes section and orange indicator dot on calendar header',()=>{
  assert.match(styleCss,/#month-title\{[^}]*cursor:\s*pointer/);
 });
 
-test('sidebar month notes placement in sidebar and general notes removed',()=>{
+test('month notes sit in the right panel next to date notes; general notes removed',()=>{
  const styleCss=readFileSync(new URL('../public/style.css',import.meta.url),'utf8');
- assert.match(source,/id="sidebar-notes"/);
  assert.match(source,/id="month-note-section"/);
+ assert.doesNotMatch(source,/id="sidebar-notes"/);
  assert.doesNotMatch(source,/id="general-note-section"/);
  assert.doesNotMatch(source,/id="general-note-input"/);
  assert.doesNotMatch(source,/async function loadGeneralNotes\(/);
  assert.doesNotMatch(source,/async function saveGeneralNote\(/);
 
- // Ensure month-note-section is inside sidebar-notes before profile
- const sidebarNotesIdx=source.indexOf('id="sidebar-notes"');
+ // Month note follows the date note inside the right panel (one place for notes)
+ const rightPanelIdx=source.indexOf('id="details-panel"');
+ const dateNoteIdx=source.indexOf('id="date-note-section"');
  const monthNoteIdx=source.indexOf('id="month-note-section"');
- const profileIdx=source.indexOf('class="profile sidebar-profile"');
- assert.ok(sidebarNotesIdx > 0 && monthNoteIdx > sidebarNotesIdx);
- assert.ok(profileIdx > monthNoteIdx);
+ assert.ok(rightPanelIdx > 0 && dateNoteIdx > rightPanelIdx && monthNoteIdx > dateNoteIdx);
 
- // Verify CSS for sidebar notes
- assert.match(styleCss,/\.sidebar-notes\{/);
  assert.doesNotMatch(styleCss,/\.general-note-badge\{/);
  assert.doesNotMatch(styleCss,/#general-note-input/);
 });

@@ -1,4 +1,4 @@
-import { translateSource, translateError } from './translations.js?v=20261125-ux-v1';
+import { translateSource, translateError } from './translations.js?v=20261126-ux-v2';
 
 // Theme: only 'light' (default) and 'dark' are supported. Initial paint is handled by /theme.js.
 export const THEMES=['light','dark'];
@@ -95,7 +95,7 @@ document.addEventListener('change',event=>{
  }
 });
 // Do not await: app.js imports this module for locale helpers.
-import(locale==='en'?'/app.en.js?v=20261125-ux-v1':'/app.js?v=20261125-ux-v1').catch(error=>{
+import(locale==='en'?'/app.en.js?v=20261126-ux-v2':'/app.js?v=20261126-ux-v2').catch(error=>{
  const app=document.querySelector('#app');
  app.replaceChildren();
  const wrap=document.createElement('main');wrap.className='loading';

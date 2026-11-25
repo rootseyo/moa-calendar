@@ -1,6 +1,6 @@
 // Frontend module for Direct Messages (쪽지함) and Task Board (pick-and-move + pointer drag-and-drop)
 
-import { EVENT_COLORS } from './event-utils.js?v=20261125-ux-v1';
+import { EVENT_COLORS } from './event-utils.js?v=20261126-ux-v2';
 
 export const TASK_COLUMNS = [
   { id: 'todo', ko: '할 일', en: 'To Do' },
@@ -71,6 +71,50 @@ function saveSandboxCards(cards) {
 // ==========================================
 // Controller Factory
 // ==========================================
+// Sandbox (demo) inbox: an in-memory stand-in for /api/messages so visitors can try 쪽지함 before signing up.
+function createSandboxInbox() {
+  const ago = mins => new Date(Date.now() - mins * 60000).toISOString();
+  let seq = 0;
+  const inbox = [
+    { id: 'sb-msg-1', sender_id: 'sb-u-jiyoung', peer_name: '지영', body: '저녁 7시 강남역 괜찮아? 🙌 늦으면 미리 말해줘!', created_at: ago(12), read_at: null },
+    { id: 'sb-msg-2', sender_id: 'sb-u-minsu', peer_name: '민수', body: 'Task Board에 숙소 후보 카드 올려뒀어. 진행 중으로 옮겨줄래?', created_at: ago(95), read_at: null },
+    { id: 'sb-msg-3', sender_id: 'sb-u-mom', peer_name: '엄마', body: '주말에 김장하니까 토요일 일정 비워두렴 😊', created_at: ago(60 * 26), read_at: ago(60 * 25) },
+  ];
+  const sent = [
+    { id: 'sb-msg-4', recipient_id: 'sb-u-jiyoung', peer_name: '지영', body: '좋아! 7시에 2번 출구에서 보자', created_at: ago(8), read_at: ago(5) },
+  ];
+  const contacts = [
+    { id: 'sb-u-jiyoung', name: '지영', calendars: ['우리의 공유 캘린더 (체험)'] },
+    { id: 'sb-u-minsu', name: '민수', calendars: ['우리의 공유 캘린더 (체험)'] },
+    { id: 'sb-u-mom', name: '엄마', calendars: ['우리의 공유 캘린더 (체험)'] },
+  ];
+  const unread = () => inbox.filter(m => !m.read_at).length;
+  return async function sandboxMessagesApi(path, method = 'GET', body = {}) {
+    if (method === 'GET' && path.startsWith('/api/messages/contacts')) return { contacts };
+    if (method === 'GET' && path.startsWith('/api/messages')) {
+      const box = new URL(path, location.origin).searchParams.get('box') === 'sent' ? sent : inbox;
+      return { messages: box.map(m => ({ ...m })), unreadCount: unread() };
+    }
+    if (method === 'POST' && path === '/api/messages/read') {
+      inbox.forEach(m => { if (!m.read_at && (body.messageId === 'all' || m.id === body.messageId)) m.read_at = new Date().toISOString(); });
+      return { unreadCount: unread() };
+    }
+    if (method === 'DELETE') {
+      const id = path.split('/').pop();
+      for (const list of [inbox, sent]) { const i = list.findIndex(m => m.id === id); if (i >= 0) list.splice(i, 1); }
+      return { unreadCount: unread() };
+    }
+    if (method === 'POST' && path === '/api/messages') {
+      const to = contacts.find(c => c.id === body.recipientId);
+      if (!to) throw new Error('체험 모드에서는 목록의 사람에게만 보낼 수 있어요.');
+      if (!String(body.body || '').trim()) throw new Error('쪽지 내용을 입력해 주세요.');
+      sent.unshift({ id: `sb-msg-new-${++seq}`, recipient_id: to.id, peer_name: to.name, body: String(body.body).slice(0, 2000), created_at: new Date().toISOString(), read_at: null });
+      return { ok: true };
+    }
+    throw new Error('체험 모드에서 지원하지 않는 요청이에요.');
+  };
+}
+
 export function createBoardAndInboxController({
   api,
   toast,
@@ -107,6 +151,13 @@ export function createBoardAndInboxController({
   let expandedMessageId = null;
 
   const $ = s => document.querySelector(s);
+  let sandboxInboxApi = null;
+  // Messages go to the real API, or to the in-memory demo inbox in sandbox mode
+  const msgApi = (path, method, body) => {
+    if (!isSandboxMode()) return api(path, method, body);
+    sandboxInboxApi ||= createSandboxInbox();
+    return sandboxInboxApi(path, method, body);
+  };
 
   function colLabel(status) {
     const col = TASK_COLUMNS.find(c => c.id === status) || TASK_COLUMNS[0];
@@ -879,19 +930,47 @@ export function createBoardAndInboxController({
       if (!editingCardId || boardReadOnly) return;
       const cal = getCurrentCalendar();
       if (!cal) return;
+      const deleted = boardCards.find(c => c.id === editingCardId);
+      const deletedIndex = boardCards.indexOf(deleted);
+      // The card that followed it in the same column, so undo can put it back in place
+      const colOrder = boardCards.filter(c => c.status === deleted?.status).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const nextId = colOrder[colOrder.indexOf(deleted) + 1]?.id || null;
+      const undo = {
+        label: tr('실행 취소'),
+        onClick: async () => {
+          if (!deleted) return;
+          if (isSandboxMode()) {
+            boardCards.splice(Math.max(0, deletedIndex), 0, deleted);
+            saveSandboxCards(boardCards);
+            renderTaskBoard();
+            toast(tr('카드를 되살렸어요.'));
+            return;
+          }
+          try {
+            const before = new Set(boardCards.map(c => c.id));
+            await api(`/api/calendars/${cal.id}/tasks`, 'POST', { title: deleted.title, status: deleted.status, description: deleted.description || '', color: deleted.color, due_date: deleted.due_date || '', assignee_id: deleted.assignee_id || '' });
+            await loadTaskBoard();
+            const restored = boardCards.find(c => !before.has(c.id));
+            if (restored && nextId && boardCards.some(c => c.id === nextId)) await executeCardMove(restored.id, deleted.status, nextId);
+            toast(tr('카드를 되살렸어요.'));
+          } catch (err) {
+            toast(err.message);
+          }
+        },
+      };
       if (isSandboxMode()) {
         boardCards = boardCards.filter(c => c.id !== editingCardId);
         saveSandboxCards(boardCards);
         dlg.close();
         renderTaskBoard();
-        toast(tr('카드를 삭제했어요.'));
+        toast(tr('카드를 삭제했어요.'), { action: undo });
         return;
       }
       try {
         await api(`/api/calendars/${cal.id}/tasks/${editingCardId}`, 'DELETE', {});
         dlg.close();
         await loadTaskBoard();
-        toast(tr('카드를 삭제했어요.'));
+        toast(tr('카드를 삭제했어요.'), { action: undo });
       } catch (err) {
         toast(err.message);
       }
@@ -910,22 +989,18 @@ export function createBoardAndInboxController({
   }
 
   async function refreshUnreadCount() {
-    if (isSandboxMode() || !getMe()?.user) {
+    if (!isSandboxMode() && !getMe()?.user) {
       updateUnreadBadges(0);
       return;
     }
     try {
-      const data = await api('/api/messages?box=inbox');
+      const data = await msgApi('/api/messages?box=inbox');
       inboxMessages = inboxBox === 'inbox' ? (data?.messages || []) : inboxMessages;
       updateUnreadBadges(data?.unreadCount || 0);
     } catch {}
   }
 
   async function openInboxDialog(initialTab = 'inbox') {
-    if (isSandboxMode()) {
-      toast(tr('쪽지함은 로그인 후 바로 사용할 수 있어요!'));
-      return;
-    }
     const dlg = $('#inbox-dialog');
     if (!dlg) return;
     attachDialogLightDismissFallback(dlg);
@@ -961,7 +1036,7 @@ export function createBoardAndInboxController({
     if (composePanel) composePanel.hidden = true;
 
     try {
-      const data = await api(`/api/messages?box=${tab}`);
+      const data = await msgApi(`/api/messages?box=${tab}`);
       inboxMessages = Array.isArray(data?.messages) ? data.messages : [];
       updateUnreadBadges(data?.unreadCount || 0);
       if (markAllBtn) markAllBtn.hidden = tab !== 'inbox' || unreadCount <= 0;
@@ -973,7 +1048,7 @@ export function createBoardAndInboxController({
 
   async function loadInboxContacts(preselectId = '', preselectName = '') {
     try {
-      const data = await api('/api/messages/contacts');
+      const data = await msgApi('/api/messages/contacts');
       inboxContacts = Array.isArray(data?.contacts) ? data.contacts : [];
     } catch {
       inboxContacts = [];
@@ -1072,7 +1147,7 @@ export function createBoardAndInboxController({
         const msg = inboxMessages.find(m => m.id === msgId);
         if (msg && inboxBox === 'inbox' && !msg.read_at) {
           msg.read_at = new Date().toISOString();
-          api('/api/messages/read', 'POST', { messageId: msgId })
+          msgApi('/api/messages/read', 'POST', { messageId: msgId })
             .then(res => {
               updateUnreadBadges(res?.unreadCount ?? Math.max(0, unreadCount - 1));
               const markAllBtn = $('#inbox-mark-all-read-btn');
@@ -1098,7 +1173,7 @@ export function createBoardAndInboxController({
       if (delBtn) {
         const msgId = delBtn.dataset.msgDelete;
         try {
-          const res = await api(`/api/messages/${msgId}`, 'DELETE', {});
+          const res = await msgApi(`/api/messages/${msgId}`, 'DELETE', {});
           inboxMessages = inboxMessages.filter(m => m.id !== msgId);
           if (res?.unreadCount !== undefined) updateUnreadBadges(res.unreadCount);
           renderInboxMessages();
@@ -1111,7 +1186,7 @@ export function createBoardAndInboxController({
 
     $('#inbox-mark-all-read-btn')?.addEventListener('click', async () => {
       try {
-        const res = await api('/api/messages/read', 'POST', { messageId: 'all' });
+        const res = await msgApi('/api/messages/read', 'POST', { messageId: 'all' });
         inboxMessages.forEach(m => { if (!m.read_at) m.read_at = new Date().toISOString(); });
         updateUnreadBadges(res?.unreadCount || 0);
         $('#inbox-mark-all-read-btn').hidden = true;
@@ -1150,7 +1225,7 @@ export function createBoardAndInboxController({
 
       if (submitBtn) submitBtn.disabled = true;
       try {
-        await api('/api/messages', 'POST', payload);
+        await msgApi('/api/messages', 'POST', payload);
         composeForm.reset();
         if (charCount) charCount.textContent = '0 / 2,000';
         toast(tr('쪽지를 보냈어요!'));

@@ -1,12 +1,12 @@
-import { locale, translateMessage, languageControl, getTheme, setTheme } from './locale.js?v=20261125-ux-v1';
-import { english } from './translations.js?v=20261125-ux-v1';
-import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261125-ux-v1';
+import { locale, translateMessage, languageControl, getTheme, setTheme } from './locale.js?v=20261126-ux-v2';
+import { english } from './translations.js?v=20261126-ux-v2';
+import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261126-ux-v2';
 import { getHoliday, getActiveRegion, getRegionName } from './holidays.js?v=20261028-instant-calendar-v1';
 import { formatKoreanLunarDate, getKoreanLunarDate } from './lunar.js?v=20261028-instant-calendar-v1';
 import { WEATHER_PRESET_LOCATIONS, parseOpenMeteoDaily, renderWeatherBadgeHtml, renderHourlyWeatherItemsHtml, getSavedWeatherLocation, saveWeatherLocation, isWeatherEnabled, setWeatherEnabled, getWeatherLocationDisplayName, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl } from './weather.js?v=20261028-cancel-v1';
-import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261125-ux-v1';
+import { createSandboxCalendar, createSandboxStore } from './sandbox.js?v=20261126-ux-v2';
 import { parseQuickAddInput, buildMapUrls } from './quick-add.js?v=20261124-phase2-v1';
-import { createBoardAndInboxController } from './board-and-inbox.js?v=20261125-ux-v1';
+import { createBoardAndInboxController } from './board-and-inbox.js?v=20261126-ux-v2';
 const $ = s=>document.querySelector(s);
 const app=$('#app');
 const mobileCalendar=window.matchMedia('(max-width:600px)');
@@ -18,7 +18,7 @@ let me={providers:{kakao:true,google:true}}, calendars=[], current, events=[], c
 let sandboxMode=false, sandboxStore=null;
 const boardInbox=typeof createBoardAndInboxController==='function'?createBoardAndInboxController({
  api:(p,m,b)=>api(p,m,b),
- toast:msg=>toast(msg),
+ toast:(msg,opts)=>toast(msg,opts),
  getLocale:()=>locale,
  tr:msg=>tr(msg),
  getCurrentCalendar:()=>current,
@@ -143,6 +143,7 @@ function enterSandboxMode(source='login'){
  renderCalendar();
  loadWeatherForecast();
  selectCalendar(demoCal.id,false);
+ boardInbox.refreshUnreadCount();
 }
 
 function exitSandboxToLogin(){
@@ -256,7 +257,23 @@ function attachOnboardingTemplateHandlers(){
 }
 
 let toastTimer;
-function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3500);}
+// toast(message) or toast(message,{action:{label,onClick}}) — an action (e.g. 실행 취소) keeps the toast up a little longer
+function toast(t,opts={}){
+ const el=$('#toast');
+ el.replaceChildren(document.createTextNode(t));
+ const action=opts?.action;
+ if(action){
+  const b=document.createElement('button');
+  b.type='button';b.className='toast-action';b.textContent=action.label;
+  b.onclick=()=>{el.classList.remove('show');clearTimeout(toastTimer);action.onClick();};
+  el.append(b);
+ }
+ el.classList.toggle('has-action',Boolean(action));
+ el.classList.add('show');
+ clearTimeout(toastTimer);
+ toastTimer=setTimeout(()=>el.classList.remove('show'),action?6500:3500);
+}
+const undoLabel=()=>tr('실행 취소');
 const emptyIcon='<span class="empty-icon">▦</span>';
 
 function renderLoading(title='불러오는 중...',sub='잠시만 기다려 주세요.'){
@@ -492,7 +509,7 @@ function formatKoreanTime(timeStr){
 }
 
 function mobileNavIcon(kind){
- const paths={day:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16M9 13h6M9 16h4"/>',week:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16M9 9v11M15 9v11"/>',month:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16M9 9v11M15 9v11M4 14h16"/>',sessions:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v1"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>'};
+ const paths={calendar:'<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4M8.5 14h2M13.5 14h2M8.5 17h2"/>',board:'<rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M9.2 4v16M14.8 4v16M5.8 8h1.4M11.3 8h1.4M11.3 11h1.4M16.8 8h1.4"/>',inbox:'<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/>',day:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16M9 13h6M9 16h4"/>',week:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16M9 9v11M15 9v11"/>',month:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16M9 9v11M15 9v11M4 14h16"/>',sessions:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v1"/>',profile:'<circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>'};
  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>`;
 }
 function renderMobileProfile(){
@@ -775,7 +792,7 @@ async function returnToCalendar(){
  if(location.pathname!==path)history.pushState({},'',path);
  if(current)await selectCalendar(current.slug||current.id,false);
  else{renderShell();renderCalendar();}
- $(mobileCalendar.matches?'#mobile-more-trigger':'#desktop-settings-trigger')?.focus({preventScroll:true});
+ $(mobileCalendar.matches?'#mobile-more-trigger':'#sidebar-settings-trigger')?.focus({preventScroll:true});
 }
 
 function renderShell(){
@@ -798,14 +815,7 @@ function renderShell(){
    </div>
    <div class="calendar-heading"><span>내 캘린더 <span class="calendar-count-badge" id="cal-count-badge">${selectedCalendarIds.size}/${calendars.length}</span></span><button class="icon" id="new-calendar" aria-label="새 캘린더 만들기"><span aria-hidden="true">＋</span><span class="calendar-create-label">새 캘린더 만들기</span></button></div>
    <div id="calendar-list">${renderCalendarListItems(false)}</div>
-   <div class="sidebar-notes" id="sidebar-notes">
-    <section class="sidebar-note-section month-note-section date-note-section" id="month-note-section" aria-labelledby="month-note-heading">
-     <div class="section-title"><h3 id="month-note-heading">월 메모</h3><span class="month-note-badge date-note-badge" id="month-note-badge">노트</span></div>
-     <p class="date-note-description">이 캘린더의 이번 달 메모예요.</p>
-     <form id="month-note-form"><label class="sr-only" for="month-note-input">선택한 월의 메모</label><textarea id="month-note-input" maxlength="5000" rows="4" placeholder="이 달에 기억해 둘 내용을 적어주세요."></textarea><p id="month-note-error" class="form-error" role="alert"></p><div class="date-note-actions"><button type="button" id="edit-month-note" class="secondary">수정</button><button type="button" id="cancel-month-note" class="text-button">취소</button><button type="submit" id="save-month-note" class="primary">저장</button></div><p id="month-note-status" class="small" role="status" aria-live="polite"></p></form>
-    </section>
-   </div>
-   <div class="profile sidebar-profile"><span class="avatar">${esc((me?.user?.name||'').slice(0,1))}</span><span>${esc(me?.user?.name||'내 계정')}<small>${me?.demo&&me?.user?.id?.startsWith('demo:')?'체험 계정':'나의 계정'}</small></span><button class="icon" id="logout" aria-label="로그아웃" title="로그아웃">↪</button></div>
+   <div class="profile sidebar-profile"><span class="avatar">${esc((me?.user?.name||'').slice(0,1))}</span><span>${esc(me?.user?.name||'내 계정')}<small>${me?.demo&&me?.user?.id?.startsWith('demo:')?'체험 계정':'나의 계정'}</small></span><button class="icon sidebar-settings-trigger" id="sidebar-settings-trigger" aria-label="설정" title="설정" aria-controls="settings-page"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button><button class="icon" id="logout" aria-label="로그아웃" title="로그아웃">↪</button></div>
    </div>
   </aside>
   <main class="main">
@@ -828,7 +838,7 @@ function renderShell(){
      ${sandboxMode?`<div class="sandbox-banner" id="sandbox-banner" role="region" aria-label="${tr('체험 모드')}"><div class="sandbox-banner-copy"><span class="sandbox-banner-badge">${tr('체험 모드')}</span><span>${tr('체험 모드로 둘러보는 중이에요. 추가한 일정은 로그인하면 자동으로 저장됩니다.')}</span></div><div class="sandbox-banner-actions"><button type="button" class="primary" id="sandbox-signup-btn">${tr('3초 만에 로그인하고 저장하기')}</button></div></div>`:renderOnboardingTemplatesHtml()}
      <div class="calendar-toolbar">
       <div class="calendar-heading-block">
-       <div class="month-heading"><h2 id="month-title"></h2></div>
+       <div class="month-heading"><h2 id="month-title"></h2><div class="dday-widget-bar" id="dday-widget-bar" role="region" aria-label="D-Day 위젯" hidden></div></div>
        <div class="calendar-view-controls">
         <button class="today-button" id="today">오늘</button>
         <div class="view-mode-group" role="tablist" aria-label="캘린더 보기 형식"><button class="view-btn ${viewMode==='day'?'active':''}" data-view="day" role="tab" aria-selected="${viewMode==='day'}">일간</button><button class="view-btn ${viewMode==='week'?'active':''}" data-view="week" role="tab" aria-selected="${viewMode==='week'}">주간</button><button class="view-btn ${viewMode==='month'?'active':''}" data-view="month" role="tab" aria-selected="${viewMode==='month'}">월간</button></div>
@@ -836,7 +846,7 @@ function renderShell(){
         <div class="month-nav" role="group" aria-label="달력 기간 이동"><button class="icon" id="prev" aria-label="이전 기간"><span aria-hidden="true">‹</span></button><button class="icon" id="next" aria-label="다음 기간"><span aria-hidden="true">›</span></button></div>
        </div>
       </div>
-      <div class="dday-widget-bar" id="dday-widget-bar" role="region" aria-label="D-Day 위젯" hidden></div>
+      
       <button type="button" class="calendar-feedback-btn" id="calendar-feedback-btn" aria-label="기능 개선 · 버그 제보" title="기능 개선 · 버그 제보"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><span>의견 · 버그 제보</span></button>
      </div>
      <form id="quick-add-form" class="quick-add-form" autocomplete="off">
@@ -846,6 +856,7 @@ function renderShell(){
        <button type="submit" class="primary" id="quick-add-submit">${tr('빠른 등록')}</button>
       </div>
       <div id="quick-add-preview" class="quick-add-preview" hidden aria-live="polite"></div>
+      <p class="quick-add-hint" id="quick-add-hint" ${(()=>{try{return localStorage.getItem('moa_quick_add_used')==='1'?'hidden':''}catch{return ''}})()}>💡 ${tr('날짜 · 시간 · @장소 · #태그를 자연스럽게 적으면 알아서 채워져요. 예: 금요일 저녁 7시 @홍대 생일파티 #약속')}</p>
      </form>
      <div class="calendar-meta"><span id="calendar-meta-chips">${renderCalendarMetaChips()}</span><span id="sync-status" role="status">연결 중</span></div>
      <div id="task-board-view" class="task-board-view" hidden></div>
@@ -881,12 +892,19 @@ function renderShell(){
       <p class="date-note-description">이 캘린더의 참여자들과 함께 보는 메모예요.</p>
       <form id="date-note-form"><label class="sr-only" for="date-note-input">선택한 날짜의 메모</label><textarea id="date-note-input" maxlength="5000" rows="5" placeholder="이 날짜에 기억해 둘 내용을 적어주세요."></textarea><p id="date-note-error" class="form-error" role="alert"></p><div class="date-note-actions"><button type="button" id="edit-date-note" class="secondary">수정</button><button type="button" id="cancel-date-note" class="text-button">취소</button><button type="submit" id="save-date-note" class="primary">저장</button></div><p id="date-note-status" class="small" role="status" aria-live="polite"></p></form>
      </section>
+     <section class="month-note-section date-note-section" id="month-note-section" aria-labelledby="month-note-heading">
+     <div class="section-title"><h3 id="month-note-heading">월 메모</h3><span class="month-note-badge date-note-badge" id="month-note-badge">노트</span></div>
+     <p class="date-note-description">이 캘린더의 이번 달 메모예요.</p>
+     <form id="month-note-form"><label class="sr-only" for="month-note-input">선택한 월의 메모</label><textarea id="month-note-input" maxlength="5000" rows="4" placeholder="이 달에 기억해 둘 내용을 적어주세요."></textarea><p id="month-note-error" class="form-error" role="alert"></p><div class="date-note-actions"><button type="button" id="edit-month-note" class="secondary">수정</button><button type="button" id="cancel-month-note" class="text-button">취소</button><button type="submit" id="save-month-note" class="primary">저장</button></div><p id="month-note-status" class="small" role="status" aria-live="polite"></p></form>
+    </section>
      </div>
     </aside>
    </div>
   </main>
   <nav class="mobile-bottom-nav" aria-label="모바일 하단 메뉴">
-   ${['day','week','month'].map((mode,i)=>`<button type="button" data-view="${mode}" aria-pressed="${viewMode===mode}">${mobileNavIcon(mode)}<span>${['일간','주간','월간'][i]}</span></button>`).join('')}
+   <button type="button" data-workspace-mode="calendar" aria-pressed="${boardInbox.getWorkspaceMode()==='calendar'}">${mobileNavIcon('calendar')}<span>캘린더</span></button>
+   <button type="button" data-workspace-mode="board" aria-pressed="${boardInbox.getWorkspaceMode()==='board'}">${mobileNavIcon('board')}<span>Task Board</span></button>
+   <button type="button" id="mobile-inbox-trigger" class="mobile-inbox-trigger">${mobileNavIcon('inbox')}<span>쪽지함</span><span class="inbox-unread-badge mobile-nav-badge" data-inbox-unread-badge ${boardInbox.getUnreadCount()>0?'':'hidden'}>${boardInbox.getUnreadCount()}</span></button>
    <button type="button" id="mobile-sessions-trigger" aria-controls="settings-page">${mobileNavIcon('sessions')}<span>접속 <span id="mobile-nav-session-count">0</span></span></button>
    <button type="button" id="mobile-profile-trigger" aria-controls="settings-page">${mobileNavIcon('profile')}<span>마이페이지</span></button>
   </nav>
@@ -960,6 +978,7 @@ function renderShell(){
  $('#mobile-menu-account').textContent=me?.user?.name||'';
  $('#mobile-more-trigger').onclick=()=>{if(sandboxMode){exitSandboxToLogin();return;}openSettingsPage('calendars');};
  $('#desktop-settings-trigger').onclick=()=>{if(sandboxMode){exitSandboxToLogin();return;}openSettingsPage('calendars');};
+ $('#sidebar-settings-trigger').onclick=()=>$('#desktop-settings-trigger').click();
  $('#mobile-sessions-trigger').onclick=()=>{if(sandboxMode){toast(tr('공유 기능과 설정은 로그인 후 바로 사용할 수 있어요!'));return;}openSettingsPage('sessions');};
  $('#mobile-profile-trigger').onclick=()=>{if(sandboxMode){exitSandboxToLogin();return;}openSettingsPage('account');};
  attachCalendarInteractions();
@@ -1005,7 +1024,7 @@ function renderShell(){
   if(boardInbox.getWorkspaceMode()==='board')boardInbox.setWorkspaceMode('calendar');
   setViewMode(b.dataset.view);
  });
- document.querySelectorAll('.sidebar-space-btn[data-workspace-mode]').forEach(btn=>{
+ document.querySelectorAll('.sidebar-space-btn[data-workspace-mode],.mobile-bottom-nav [data-workspace-mode]').forEach(btn=>{
   btn.onclick=()=>boardInbox.setWorkspaceMode(btn.dataset.workspaceMode);
  });
  if($('#topbar-board-toggle'))$('#topbar-board-toggle').onclick=()=>{
@@ -1013,6 +1032,8 @@ function renderShell(){
  };
  if($('#open-inbox-sidebar-btn'))$('#open-inbox-sidebar-btn').onclick=()=>boardInbox.openInboxDialog('inbox');
  if($('#topbar-inbox-trigger'))$('#topbar-inbox-trigger').onclick=()=>boardInbox.openInboxDialog('inbox');
+ if($('#mobile-inbox-trigger'))$('#mobile-inbox-trigger').onclick=()=>boardInbox.openInboxDialog('inbox');
+ if($('#settings-feedback-btn'))$('#settings-feedback-btn').onclick=()=>openFeedbackDialog();
  boardInbox.initTaskCardDialogListeners();
  boardInbox.syncWorkspaceModeUI();
  if(boardInbox.getWorkspaceMode()==='board')boardInbox.loadTaskBoard();
@@ -1878,8 +1899,7 @@ function renderCalendar(){
  };
  $('#workspace-root').dataset.currentView=viewMode;
  $('#workspace-root').dataset.hasCalendar=String(Boolean(current));
- document.querySelectorAll('.mobile-bottom-nav [data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===viewMode)));
- renderMonthlyItems();
+  renderMonthlyItems();
  renderDdayWidgets();
 
  if(!current){
@@ -2208,7 +2228,7 @@ function initializeLunarSettings(){
 }
 
 function renderMonthView(){
- const visibleCount=mobileCalendar.matches?4:3;
+ const visibleCount=mobileCalendar.matches?2:3;
  const start=new Date(month.getFullYear(),month.getMonth(),1-month.getDay());
  const days=Array.from({length:42},(_,i)=>{
   const d=new Date(start);
@@ -2223,6 +2243,7 @@ function renderMonthView(){
   weekAllocations.push(allocateWeekSlots(weekKeys));
  }
 
+ const todayKey=dateKey(new Date());
  $('#calendar').innerHTML=`<div class="weekdays">${dayNames.map(d=>`<span>${d}</span>`).join('')}</div><div class="month-grid">${days.map((day,i)=>{
   const {d,key,items,holiday}=day;
   const col=i%7;
@@ -2238,15 +2259,18 @@ function renderMonthView(){
   const renderedEvents=visibleSlots.filter(Boolean);
   const hiddenCount=items.length-renderedEvents.length;
   const holidayClass=holiday?'is-holiday':d.getDay()===6?'is-saturday':'';
+  const isOutside=d.getMonth()!==month.getMonth();
+  // Weather only for today/future days in this month; lunar dates only for this month (less noise per cell)
+  const showWeather=!isOutside&&key>=todayKey;
 
-  return `<div class="day ${d.getMonth()!==month.getMonth()?'outside':''} ${key===selected?'selected':''} ${holidayClass}" data-date-cell="${key}" data-drop-date="${key}">
+  return `<div class="day ${isOutside?'outside':''} ${key===selected?'selected':''} ${holidayClass}" data-date-cell="${key}" data-drop-date="${key}">
    <div class="day-header-row">
     <div class="calendar-date-pair">
      <button class="day-number ${key===dateKey(new Date())?'is-today':''}" data-date="${key}" aria-label="${key}${holiday?` (${holiday})`:''} 일정 보기" aria-pressed="${key===selected}">${d.getDate()}${noteDateMarker(key)}</button>
-     ${renderWeatherBadge(key,'month')}
+     ${showWeather?renderWeatherBadge(key,'month'):''}
     </div>
     <div class="calendar-date-detail">
-     ${renderLunarLabel(key,'month')}
+     ${isOutside?'':renderLunarLabel(key,'month')}
      ${holiday?`<span class="day-holiday-name" title="${esc(holiday)}">${esc(holiday)}</span>`:''}
     </div>
    </div>
@@ -2270,12 +2294,13 @@ function renderWeekView(){
   const key=dateKey(d),items=dayEvents(key),holiday=getHoliday(key);
   const isToday=key===dateKey(new Date());
   const holidayClass=holiday?'is-holiday':d.getDay()===6?'is-saturday':'';
+  const showWeather=key>=dateKey(new Date());
   return `<div class="week-col ${key===selected?'is-selected':''} ${holidayClass}" data-date-cell="${key}" data-drop-date="${key}">
    <div class="week-col-header">
      <div class="day-name">${dayNames[i]}</div>
      <div class="calendar-date-pair">
      <button class="day-num ${isToday?'is-today':''}" data-date="${key}" aria-label="${key}${holiday?` (${holiday})`:''} 선택" aria-pressed="${key===selected}">${d.getDate()}${noteDateMarker(key)}</button>
-     ${renderWeatherBadge(key,'week')}
+     ${showWeather?renderWeatherBadge(key,'week'):''}
      </div>
      <div class="calendar-date-detail">
      ${renderLunarLabel(key,'week')}
@@ -2614,13 +2639,8 @@ function attachEventInteractions(){
    selectedEvent=evObj;
    document.querySelectorAll('.selected-event').forEach(n=>n.classList.remove('selected-event'));
    document.querySelectorAll(`[data-event="${evId}"]`).forEach(n=>n.classList.add('selected-event'));
-   if(mobileCalendar.matches)openEvent(evObj,null,null,el);
-  };
-
-  el.ondblclick=e=>{
-   e.stopPropagation();
-   if(mobileCalendar.matches)return;
-   openEvent(evObj, null, null, el);
+   // One click opens the event everywhere (desktop used to need a double-click). It stays selected for Delete / copy-paste.
+   openEvent(evObj,null,null,el);
   };
 
   // Drag and drop setup
@@ -2730,9 +2750,18 @@ async function moveEventDate(ev,newDate,dropHour){
  try{
   await api(`/api/calendars/${targetCalId}/events/${ev.id}`,'PUT',updatedPayload);
   selected=newDate;
-  toast(`일정을 ${newDate}로 이동했어요.`);
   await loadAllSelectedEvents();
   renderCalendar();
+  toast(`일정을 ${newDate}로 이동했어요.`,{action:{label:undoLabel(),onClick:async()=>{
+   const fresh=events.find(x=>x.id===ev.id);
+   try{
+    await api(`/api/calendars/${targetCalId}/events/${ev.id}`,'PUT',{...updatedPayload,start:ev.start,end:ev.end,version:fresh?.version??updatedPayload.version+1});
+    selected=origStartDate;
+    await loadAllSelectedEvents();
+    renderCalendar();
+    toast(tr('이동을 취소했어요.'));
+   }catch(err){toast(err.message);}
+  }}});
  }catch(err){
   toast(err.message);
  }
@@ -2794,9 +2823,19 @@ async function deleteEventById(ev){
   if($('#event-dialog').open)$('#event-dialog').close();
   if(selectedEvent?.id===ev.id)selectedEvent=null;
   if(copiedEvent?.id===ev.id)copiedEvent=null;
-  toast(translateMessage('일정을 삭제했어요.'));
+  const deletedSeriesFuture=Boolean(ev.series_id&&$('#event-series-scope')?.value==='future');
   await loadAllSelectedEvents();
   renderCalendar();
+  // Undo re-creates the event (a "this and future" series delete can't be restored as one event, so no undo there)
+  toast(translateMessage('일정을 삭제했어요.'),deletedSeriesFuture?{}:{action:{label:undoLabel(),onClick:async()=>{
+   const restore={title:ev.title,start:ev.start,end:ev.end,color:ev.color,all_day:Boolean(ev.all_day),category:ev.category||'',notes:ev.notes||'',location:ev.location||'',is_todo:Boolean(ev.is_todo),is_dday:Boolean(ev.is_dday),is_cancelled:Boolean(ev.is_cancelled),reminder_enabled:Boolean(ev.reminder_enabled),reminder_minutes:ev.reminder_minutes||10};
+   try{
+    await api(`/api/calendars/${targetCalId}/events`,'POST',restore);
+    await loadAllSelectedEvents();
+    renderCalendar();
+    toast(tr('일정을 되살렸어요.'));
+   }catch(err){toast(err.message);}
+  }}});
  }catch(e){
   toast(e.message);
   if($('#event-dialog').open)$('#event-form .form-error').textContent=e.message;
@@ -2996,6 +3035,18 @@ $('#event-form').elements.all_day.onchange=e=>{
  }
  updateRepeatPreview();
 };
+// Event form: essentials first; category/location/color/extra toggles/repeat/memo behind "더보기"
+function setEventFormExpanded(expanded){
+ const f=$('#event-form'),btn=$('#event-more-toggle');
+ if(!f||!btn)return;
+ f.dataset.expanded=String(expanded);
+ btn.setAttribute('aria-expanded',String(expanded));
+ btn.querySelector('.event-more-icon').textContent=expanded?'－':'＋';
+ btn.querySelector('.event-more-label').textContent=expanded?tr('간단히 보기'):tr('장소 · 색상 · 반복 · 알림 · 메모 더보기');
+}
+function eventUsesAdvancedFields(e){
+ return Boolean(e&&(e.category||e.location||e.notes||(e.color&&e.color!=='sage')||e.is_todo||e.is_dday||e.is_cancelled||e.reminder_enabled));
+}
 function openEvent(event,defaultStart,defaultEnd,anchorElem,copying=false){
  if(!current)return;
  editing=event&&!copying?{...event}:null;
@@ -3054,6 +3105,15 @@ function openEvent(event,defaultStart,defaultEnd,anchorElem,copying=false){
   else if($('#event-collab-section'))$('#event-collab-section').hidden=true;
  }
 
+ if(typeof setEventFormExpanded==='function')setEventFormExpanded(eventUsesAdvancedFields(event)||readonly);
+ if($('#event-more-toggle')&&!$('#event-more-toggle').dataset.bound){
+  $('#event-more-toggle').dataset.bound='1';
+  $('#event-more-toggle').onclick=()=>{
+   const next=$('#event-form').dataset.expanded!=='true';
+   setEventFormExpanded(next);
+   if(next)$('#event-advanced').querySelector('input,select,textarea')?.focus({preventScroll:false});
+  };
+ }
  dlg.showModal();
  dlg.style.transform='';
  dlg.scrollTop=0;
@@ -4591,6 +4651,7 @@ function attachQuickAddHandlers(){
   const parsed=parseQuickAddInput(input.value,{baseDate:new Date(),defaultDate:selected,locale});
   if(!parsed||!preview){
    if(preview){preview.hidden=true;preview.innerHTML='';}
+   $('#quick-add-hint')?.classList.remove('is-previewing');
    return;
   }
   const datePart=parsed.start.slice(0,10);
@@ -4605,6 +4666,7 @@ function attachQuickAddHandlers(){
   ].filter(Boolean);
   preview.innerHTML=chips.join('');
   preview.hidden=false;
+  if($('#quick-add-hint'))$('#quick-add-hint').classList.add('is-previewing');
  };
 
  input.addEventListener('input',updatePreview);
@@ -4632,6 +4694,8 @@ function attachQuickAddHandlers(){
   try{
    await api(`/api/calendars/${target.id}/events`,'POST',parsed);
    input.value='';
+   try{localStorage.setItem('moa_quick_add_used','1');}catch{}
+   if($('#quick-add-hint'))$('#quick-add-hint').hidden=true;
    if(preview){preview.hidden=true;preview.innerHTML='';}
    selected=parsed.start.slice(0,10);
    month=new Date(`${selected}T12:00:00`);

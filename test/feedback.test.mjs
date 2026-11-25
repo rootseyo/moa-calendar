@@ -8,7 +8,7 @@ const appJs = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8')
 const css = readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
 const translations = readFileSync(new URL('../public/translations.js', import.meta.url), 'utf8');
 
-test('feedback buttons are placed at top-right of calendar on desktop and left of search on mobile', () => {
+test('feedback: top-right of calendar on desktop; on mobile it lives in the settings menu', () => {
   // Mobile feedback trigger is directly before mobile search trigger in topbar-actions
   const topbarIdx = appJs.indexOf('<div class="topbar-actions">');
   const mobileFeedbackIdx = appJs.indexOf('id="mobile-feedback-trigger"', topbarIdx);
@@ -37,6 +37,11 @@ test('feedback buttons are placed at top-right of calendar on desktop and left o
   assert.match(css, /\.calendar-feedback-btn\{[^}]*margin-left:auto/);
   assert.match(css, /\.mobile-feedback-trigger\{display:none\}/);
   assert.match(css, /@media\(max-width:600px\)\{[^}]*\.calendar-feedback-btn\{display:none\}[^}]*\.mobile-feedback-trigger\{display:flex/);
+
+  // Mobile: header trigger is hidden to declutter; feedback is reachable from the settings menu
+  assert.match(css, /\.topbar-actions \.mobile-feedback-trigger\{display:none\}/);
+  assert.match(html, /id="settings-feedback-btn"/);
+  assert.match(appJs, /\$\('#settings-feedback-btn'\)\.onclick=\(\)=>openFeedbackDialog\(\)/);
 
   // English translations exist
   assert.match(translations, /"기능 개선 · 버그 제보": "Feedback & Bug Report"/);

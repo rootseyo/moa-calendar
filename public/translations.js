@@ -848,6 +848,15 @@ Object.assign(english, {
  "사진 앨범 정리": "Sort photo album",
  "모임 장소 정하기": "Pick a meetup spot",
  "투표 완료": "Poll closed",
+ "실행 취소": "Undo",
+ "간단히 보기": "Show less",
+ "이동을 취소했어요.": "Move undone.",
+ "일정을 되살렸어요.": "Event restored.",
+ "카드를 되살렸어요.": "Card restored.",
+ "장소 · 색상 · 반복 · 알림 · 메모 더보기": "More: location · color · repeat · reminder · notes",
+ "날짜 · 시간 · @장소 · #태그를 자연스럽게 적으면 알아서 채워져요. 예: 금요일 저녁 7시 @홍대 생일파티 #약속": "Type naturally — date, time, @place and #tag are filled in for you. e.g. Friday 7pm @Hongdae birthday party #plans",
+ "체험 모드에서는 목록의 사람에게만 보낼 수 있어요.": "In demo mode you can only message people on the list.",
+ "체험 모드에서 지원하지 않는 요청이에요.": "That isn't available in demo mode.",
  "카드 저장": "Save card",
  "새 카드를 추가했어요.": "Card added.",
  "카드를 수정했어요.": "Card updated.",
@@ -859,7 +868,7 @@ const sourceOnly=[
  ['}개','} events'], ['}회','} occurrences'], ['}시','}h'], ['}분','}m'],
  ["'회'","'occurrences'"], ['>함께하는 10월<','>October together<'],
  ['함께하는 10월 ⛅ 19°','October together ⛅ 19°'],
- ["'로그인'","'Sign in'"], ['<small>민수 · 12.06</small>','<small>Minsu · 12.06</small>'], ['<small>지영 · 11.30</small>','<small>Jiyoung · 11.30</small>'], ['<em>읽음</em>','<em>Read</em>'], ['<strong>지영</strong>','<strong>Jiyoung</strong>'], ['float-dm-avatar">지<','float-dm-avatar">J<'],
+ ["'로그인'","'Sign in'"], ['<span>캘린더</span></button>','<span>Calendar</span></button>'], ['<small>민수 · 12.06</small>','<small>Minsu · 12.06</small>'], ['<small>지영 · 11.30</small>','<small>Jiyoung · 11.30</small>'], ['<em>읽음</em>','<em>Read</em>'], ['<strong>지영</strong>','<strong>Jiyoung</strong>'], ['float-dm-avatar">지<','float-dm-avatar">J<'],
 ];
 const entries=Object.entries(english).filter(([key])=>key.length>1).sort((a,b)=>b[0].length-a[0].length);
 // Compile static UI source only. User data is inserted later by the application.
