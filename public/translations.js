@@ -842,6 +842,12 @@ Object.assign(english, {
  "저녁 7시 괜찮아? 🙌": "Dinner at 7 okay? 🙌",
  "Google로 시작하기": "Continue with Google",
  "이메일 또는 소셜 계정으로 로그인하고, 함께할 캘린더를 시작하세요.": "Sign in with email or a social account to start a shared calendar.",
+ "Task Board 예시: 포스트잇 카드를 픽해서 할 일에서 진행 중, 완료로 옮기는 모습": "Task Board example: a sticky note is picked up and moved from To Do to In Progress to Done",
+ "포스트잇을 픽해서 <strong>할 일 → 진행 중 → 완료</strong>로 옮기면, 함께 쓰는 모두에게 실시간으로 반영돼요.": "Pick up a sticky note and move it <strong>To Do → In Progress → Done</strong> — everyone sharing the board sees it in real time.",
+ "주말 여행 숙소 예약": "Book weekend stay",
+ "사진 앨범 정리": "Sort photo album",
+ "모임 장소 정하기": "Pick a meetup spot",
+ "투표 완료": "Poll closed",
  "카드 저장": "Save card",
  "새 카드를 추가했어요.": "Card added.",
  "카드를 수정했어요.": "Card updated.",
@@ -853,7 +859,7 @@ const sourceOnly=[
  ['}개','} events'], ['}회','} occurrences'], ['}시','}h'], ['}분','}m'],
  ["'회'","'occurrences'"], ['>함께하는 10월<','>October together<'],
  ['함께하는 10월 ⛅ 19°','October together ⛅ 19°'],
- ["'로그인'","'Sign in'"], ['<em>읽음</em>','<em>Read</em>'], ['<strong>지영</strong>','<strong>Jiyoung</strong>'], ['float-dm-avatar">지<','float-dm-avatar">J<'],
+ ["'로그인'","'Sign in'"], ['<small>민수 · 12.06</small>','<small>Minsu · 12.06</small>'], ['<small>지영 · 11.30</small>','<small>Jiyoung · 11.30</small>'], ['<em>읽음</em>','<em>Read</em>'], ['<strong>지영</strong>','<strong>Jiyoung</strong>'], ['float-dm-avatar">지<','float-dm-avatar">J<'],
 ];
 const entries=Object.entries(english).filter(([key])=>key.length>1).sort((a,b)=>b[0].length-a[0].length);
 // Compile static UI source only. User data is inserted later by the application.

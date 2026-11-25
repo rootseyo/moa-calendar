@@ -86,6 +86,11 @@ export function servePublicPage(req, res, pathname, appOrigin, metaOverride = nu
     .replace(/(<meta name="twitter:description" content=")[^"]*(">)/, `$1${safeDesc}$2`);
   }
  }
+ // No session cookie → definitely a guest: skip painting the calendar skeleton (prevents a calendar flash before the login page).
+ // The cookie is HttpOnly, so only the server can make this call before first paint.
+ const hasSession = /(?:^|;\s*)session=[^;\s]/.test(req.headers?.cookie || '');
+ if (!hasSession) template = template.replace(/<html lang="(\w+)">/, '<html lang="$1" data-boot="guest">');
+ res.setHeader('Vary', 'Cookie');
  const pageUrl = metaOverride?.pageUrl || (origin + (isHome ? pathname : '/'));
  const html = template
   .replaceAll('__PAGE_URL__', escapeHTML(pageUrl))

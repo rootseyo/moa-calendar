@@ -1,6 +1,6 @@
 // Moa Calendar Service Worker: Web Push Notifications + Offline Read PWA Cache
 
-const STATIC_CACHE = 'moa-static-v8';
+const STATIC_CACHE = 'moa-static-v10';
 const API_CACHE = 'moa-api-v1';
 const PRECACHE_URLS = [
   '/',
@@ -71,7 +71,23 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 2. Static assets: Stale-While-Revalidate
+  // 2. App pages (HTML differs by login state): Network-First, cache only as offline fallback
+  if (req.mode === 'navigate' && ['/', '/en/', '/ko/'].includes(url.pathname)) {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(STATIC_CACHE).then(cache => cache.put(req, clone)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(req, { ignoreSearch: true }).then(cached => cached || Response.error()))
+    );
+    return;
+  }
+
+  // 3. Static assets: Stale-While-Revalidate
   if (isCacheableStaticPath(url.pathname)) {
     event.respondWith(
       caches.match(req).then(cached => {

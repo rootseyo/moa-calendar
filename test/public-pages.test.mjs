@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { servePublicPage } from '../public-pages.mjs';
+import { readFileSync } from 'node:fs';
 
 function request(path, method = 'GET') {
  const res = { headers: {}, statusCode: 200, setHeader(key, value) { this.headers[key] = value; }, end(content) { this.body = content; } };
@@ -129,4 +130,28 @@ test('settings sections and calendar details support direct access without being
  }
  assert.equal(request('/settings/unknown').statusCode, 404);
  assert.equal(request('/settings/icloud', 'HEAD').body, undefined);
+});
+
+test('guest page skips the calendar skeleton; session cookie keeps it', () => {
+ const serve = cookie => {
+  const res = { headers: {}, statusCode: 200, setHeader(key, value) { this.headers[key] = value; }, end(content) { this.body = content; } };
+  servePublicPage({ method: 'GET', headers: cookie ? { cookie } : {} }, res, '/', 'https://calendar.example');
+  return res;
+ };
+ const guest = serve(null);
+ assert.match(guest.body, /<html lang="ko" data-boot="guest">/);
+ assert.match(guest.body, /<div class="boot-splash" aria-hidden="true">/);
+ assert.equal(guest.headers.Vary, 'Cookie');
+ assert.match(serve('session=').body, /data-boot="guest"/);
+ assert.doesNotMatch(serve('a=1; session=abc').body, /data-boot=/);
+ const css = readFileSync(new URL('../public/style.css', import.meta.url), 'utf8');
+ assert.match(css, /html\[data-boot="guest"\] #workspace-root\{display:none\}/);
+});
+
+test('landing page shows the Task Board lane demo', () => {
+ const appJs = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+ assert.match(appJs, /class="board-demo"/);
+ assert.match(appJs, /board-demo-mover/);
+ const sw = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
+ assert.match(sw, /req\.mode === 'navigate'/);
 });
