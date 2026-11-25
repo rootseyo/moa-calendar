@@ -1,6 +1,6 @@
 // Frontend module for Direct Messages (쪽지함) and Task Board (pick-and-move + pointer drag-and-drop)
 
-import { EVENT_COLORS } from './event-utils.js?v=20261125-theme-v1';
+import { EVENT_COLORS } from './event-utils.js?v=20261125-postit-v1';
 
 export const TASK_COLUMNS = [
   { id: 'todo', ko: '할 일', en: 'To Do' },
@@ -57,7 +57,7 @@ function loadSandboxCards() {
   const seed = [
     { id: 'sb-task-1', status: 'todo', title: '주말 여행 숙소 후보 추리기', description: '바다 전망 숙소 2~3곳 비교하기', color: 'blue', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
     { id: 'sb-task-2', status: 'todo', title: '장보기 체크리스트 작성', description: '바비큐 재료 & 음료 확인', color: 'peach', assignee_id: null, assignee_name: '', due_date: '', sort_order: 10 },
-    { id: 'sb-task-3', status: 'in_progress', title: '카드를 픽해서 다른 열로 옮겨보세요!', description: '왼쪽 ⠿ 핸들을 드래그하거나 클릭(픽)한 뒤 원하는 열을 눌러 이동할 수 있어요.', color: 'sage', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
+    { id: 'sb-task-3', status: 'in_progress', title: '카드를 픽해서 다른 열로 옮겨보세요!', description: '포스트잇을 클릭해서 들어 올린 뒤, 옮길 상태 열을 클릭하세요. 끌어서 옮길 수도 있어요.', color: 'yellow', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
     { id: 'sb-task-4', status: 'done', title: '모아 캘린더 둘러보기', description: '로그인하면 함께 쓰는 보드에 저장돼요.', color: 'lavender', assignee_id: null, assignee_name: '', due_date: '', sort_order: 0 },
   ];
   try { localStorage.setItem(SANDBOX_TASKS_KEY, JSON.stringify(seed)); } catch {}
@@ -91,8 +91,13 @@ export function createBoardAndInboxController({
 
   // Pick-and-move state ("카드를 픽해서 옮기기")
   let pickedCardId = null;
+  // Card that was just put down (plays a short "drop" animation once)
+  let justDroppedId = null;
+  // Swallow the click that follows a real pointer drag
+  let suppressCardClickUntil = 0;
   // Active pointer drag state
   let activeDrag = null;
+  let boardKeysBound = false;
 
   // Inbox state
   let inboxBox = 'inbox'; // 'inbox' | 'sent' | 'compose'
@@ -211,25 +216,28 @@ export function createBoardAndInboxController({
   }
 
   function renderCardHtml(card) {
+    const en = getLocale() === 'en';
     const isPicked = pickedCardId === card.id;
-    const color = EVENT_COLORS.includes(card.color) ? card.color : 'sage';
+    const justDropped = justDroppedId === card.id;
+    const color = EVENT_COLORS.includes(card.color) ? card.color : 'yellow';
     const dueLabel = card.due_date ? `<span class="task-card-due">📅 ${esc(card.due_date.slice(5).replace('-', '.'))}</span>` : '';
     const assigneeLabel = card.assignee_name ? `<span class="task-card-assignee" title="${esc(card.assignee_name)}"><span class="task-mini-avatar">${esc(card.assignee_name.slice(0, 1))}</span>${esc(card.assignee_name)}</span>` : '';
     const descHtml = card.description ? `<p class="task-card-desc">${esc(card.description)}</p>` : '';
-    const handleLabel = getLocale() === 'en'
-      ? `Pick or drag ${card.title}`
-      : `${card.title} 카드 픽해서 옮기기`;
+    const handleLabel = en ? `Pick up ${card.title}` : `${card.title} 카드 픽하기`;
+    const editLabel = en ? `Edit ${card.title}` : `${card.title} 카드 편집`;
+    const classes = ['task-card', 'postit', color, isPicked ? 'is-picked' : '', justDropped ? 'is-dropped' : '', boardReadOnly ? 'is-readonly' : ''].filter(Boolean).join(' ');
 
-    return `<article class="task-card ${esc(color)} ${isPicked ? 'is-picked' : ''}" data-task-id="${esc(card.id)}" data-task-status="${esc(card.status)}">
+    return `<article class="${classes}" data-task-id="${esc(card.id)}" data-task-status="${esc(card.status)}">
       <div class="task-card-top">
-        ${boardReadOnly ? '' : `<button type="button" class="task-card-handle" data-task-handle="${esc(card.id)}" aria-label="${esc(handleLabel)}" aria-pressed="${isPicked}" title="${getLocale() === 'en' ? 'Drag or click to pick & move' : '드래그하거나 클릭(픽)해서 옮기기'}"><span aria-hidden="true">⠿</span></button>`}
-        <button type="button" class="task-card-body-btn" data-task-open="${esc(card.id)}">
-          <strong class="task-card-title">${esc(card.title)}</strong>
-          ${descHtml}
-        </button>
+        ${boardReadOnly ? '' : `<button type="button" class="task-card-handle" data-task-handle="${esc(card.id)}" aria-label="${esc(handleLabel)}" aria-pressed="${isPicked}" title="${en ? 'Click to pick up, or drag' : '클릭해서 픽하거나 드래그하세요'}"><span aria-hidden="true">✋</span></button>`}
+        <button type="button" class="task-card-edit" data-task-edit="${esc(card.id)}" aria-label="${esc(editLabel)}" title="${en ? 'Edit' : '편집'}"><span aria-hidden="true">✎</span></button>
+      </div>
+      <div class="task-card-body">
+        <strong class="task-card-title">${esc(card.title)}</strong>
+        ${descHtml}
       </div>
       ${(dueLabel || assigneeLabel) ? `<div class="task-card-meta">${dueLabel}${assigneeLabel}</div>` : ''}
-      ${!boardReadOnly ? `<span class="task-card-key-hint" aria-hidden="true">${isPicked ? (getLocale() === 'en' ? 'Arrows to move · Space to drop · Esc to cancel' : '방향키로 이동 · Space로 놓기 · Esc 취소') : (getLocale() === 'en' ? 'Click or Space to pick' : '클릭·드래그로 픽해서 이동')}</span>` : ''}
+      ${!boardReadOnly && isPicked ? `<span class="task-card-key-hint" aria-hidden="true">${en ? 'Click a column to drop · ←→ move · Esc cancel' : '옮길 열을 클릭 · ←→ 이동 · Esc 취소'}</span>` : ''}
     </article>`;
   }
 
@@ -254,7 +262,7 @@ export function createBoardAndInboxController({
             <h2>Task Board</h2>
             <span class="task-board-cal-pill">${esc(cal.name)}</span>
           </div>
-          <p class="muted small">${en ? 'Pick or drag any card by its ⠿ handle to move it across columns or reorder.' : '카드의 ⠿ 핸들을 드래그하거나 클릭(픽)해서 원하는 열·순서로 자유롭게 옮기세요.'}</p>
+          <p class="muted small">${en ? 'Click a sticky note to pick it up, then click another column to move it. You can also drag it.' : '포스트잇을 클릭해서 픽(들기)한 뒤, 옮길 상태 열을 클릭하세요. 끌어서 옮길 수도 있어요.'}</p>
         </div>
         <div class="task-board-header-actions">
           <button type="button" class="secondary" data-board-back-calendar>${en ? '← Calendar View' : '← 달력 보기로'}</button>
@@ -262,17 +270,18 @@ export function createBoardAndInboxController({
         </div>
       </div>
       ${pickedCard ? `<div class="task-pick-banner" role="region" aria-label="${en ? 'Picked card' : '픽한 카드 안내'}">
-        <span>✋ <strong>${esc(pickedCard.title)}</strong> ${en ? 'picked — click any column or card slot to place it.' : '카드를 픽했어요! 옮길 열이나 위치를 클릭해 놓으세요.'}</span>
-        <button type="button" class="secondary small-btn" id="cancel-picked-card-btn">${en ? 'Cancel (Esc)' : '픽 취소 (Esc)'}</button>
+        <span>✋ <strong>${esc(pickedCard.title)}</strong> ${en ? 'is picked up — click a column (or a spot between notes) to drop it.' : '카드를 들었어요! 옮길 상태 열이나 위치를 클릭해 내려놓으세요.'}</span>
+        <button type="button" class="secondary small-btn" id="cancel-picked-card-btn">${en ? 'Cancel' : '픽 취소'}<span class="kbd-hint"> (Esc)</span></button>
       </div>` : ''}
       <p id="task-board-live" role="status" class="sr-only"></p>
-      <div class="task-board-columns" id="task-board-columns">
+      <div class="task-board-columns ${pickedCard ? 'has-picked' : ''}" id="task-board-columns">
         ${TASK_COLUMNS.map(col => {
           const cards = boardCards
             .filter(c => c.status === col.id)
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
           const title = en ? col.en : col.ko;
-          return `<section class="task-column" data-col-status="${col.id}" aria-label="${esc(title)}">
+          const isSourceCol = pickedCard && pickedCard.status === col.id;
+          return `<section class="task-column ${pickedCard && !isSourceCol ? 'is-drop-target' : ''}" data-col-status="${col.id}" aria-label="${esc(title)}">
             <header class="task-column-header">
               <div class="task-column-title">
                 <span class="task-status-dot status-${col.id}" aria-hidden="true"></span>
@@ -281,11 +290,11 @@ export function createBoardAndInboxController({
               </div>
               ${boardReadOnly ? '' : `<button type="button" class="icon task-col-add-btn" data-add-col-card="${col.id}" aria-label="${esc(title)} ${en ? 'add card' : '카드 추가'}" title="${en ? 'Add card' : '이 열에 카드 추가'}">＋</button>`}
             </header>
-            ${pickedCard && !boardReadOnly ? `<button type="button" class="task-column-drop-here" data-place-picked-col="${col.id}">${en ? `Place "${pickedCard.title}" here` : `여기로 '${pickedCard.title}' 옮기기`}</button>` : ''}
             <div class="task-card-list" data-card-list="${col.id}">
               ${cards.length ? cards.map(renderCardHtml).join('') : `<div class="task-column-empty" data-empty-col="${col.id}">${en ? 'No cards yet' : '아직 카드가 없어요'}</div>`}
             </div>
-            ${boardReadOnly ? '' : `<form class="task-quick-card-form" data-quick-card-form="${col.id}" autocomplete="off">
+            ${pickedCard && !boardReadOnly && !isSourceCol ? `<button type="button" class="task-column-drop-here" data-place-picked-col="${col.id}">${en ? `Move to ${esc(title)}` : `'${esc(title)}'(으)로 옮기기`}</button>` : ''}
+            ${boardReadOnly || pickedCard ? '' : `<form class="task-quick-card-form" data-quick-card-form="${col.id}" autocomplete="off">
               <input type="text" name="title" maxlength="120" placeholder="＋ ${en ? 'Add a card…' : '빠른 카드 추가…'}" aria-label="${esc(title)} ${en ? 'quick card title' : '빠른 카드 제목'}">
             </form>`}
           </section>`;
@@ -294,6 +303,7 @@ export function createBoardAndInboxController({
     `;
 
     bindTaskBoardEvents(container);
+    justDroppedId = null;
   }
 
   async function persistColumnReorder(targetStatus, orderedIds, movedId) {
@@ -329,7 +339,7 @@ export function createBoardAndInboxController({
   }
 
   // Move card in DOM with FLIP animation + persist
-  async function executeCardMove(cardId, targetStatus, beforeCardId = null, focusHandleAfter = false) {
+  async function executeCardMove(cardId, targetStatus, beforeCardId = null, focusHandleAfter = false, fromRect = null) {
     const boardEl = $('#task-board-columns');
     if (!boardEl) return;
     const cardEl = boardEl.querySelector(`.task-card[data-task-id="${CSS.escape(cardId)}"]`);
@@ -345,6 +355,7 @@ export function createBoardAndInboxController({
     // Record rects for FLIP
     const allCardEls = [...boardEl.querySelectorAll('.task-card')];
     const beforeRects = new Map(allCardEls.map(el => [el, el.getBoundingClientRect()]));
+    if (fromRect) beforeRects.set(cardEl, fromRect);
 
     // Remove empty placeholder in target list if present
     targetList.querySelector('.task-column-empty')?.remove();
@@ -382,10 +393,15 @@ export function createBoardAndInboxController({
         if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
           el.animate(
             [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }],
-            { duration: 190, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+            { duration: el === cardEl ? 280 : 190, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
           );
         }
       }
+      // The moved sticky note "lands": settles from lifted to resting pose
+      cardEl.classList.remove('is-dropped');
+      void cardEl.offsetWidth;
+      cardEl.classList.add('is-dropped');
+      cardEl.addEventListener('animationend', () => cardEl.classList.remove('is-dropped'), { once: true });
     }
 
     if (focusHandleAfter) {
@@ -410,6 +426,7 @@ export function createBoardAndInboxController({
   }
 
   function setPickedCard(cardId, focusHandle = false) {
+    if (!cardId && pickedCardId) justDroppedId = pickedCardId;
     pickedCardId = cardId;
     renderTaskBoard();
     if (cardId) {
@@ -426,17 +443,30 @@ export function createBoardAndInboxController({
     }
   }
 
+  async function placePickedCard(targetStatus, beforeCardId = null) {
+    if (!pickedCardId) return;
+    const movingId = pickedCardId;
+    const liftedRect = document.querySelector(`.task-card[data-task-id="${CSS.escape(movingId)}"]`)?.getBoundingClientRect() || null;
+    pickedCardId = null;
+    renderTaskBoard();
+    await executeCardMove(movingId, targetStatus, beforeCardId, true, liftedRect);
+  }
+
   // Pointer drag-and-drop (per modern-web-guidance: pointer capture on handle, layout midpoints, real DOM node lift, Escape cancel)
-  function startPointerDrag(e, handleEl, cardEl) {
+  function startPointerDrag(e, cardEl) {
     if (e.button !== 0 || boardReadOnly) return;
     if (activeDrag) return;
-    const cardId = handleEl.dataset.taskHandle;
+    const cardId = cardEl.dataset.taskId;
     const boardEl = $('#task-board-columns');
     if (!cardId || !boardEl) return;
+    // Edit button never starts a drag; on touch, only the ✋ handle drags (body keeps page scrolling)
+    if (e.target.closest('[data-task-edit]')) return;
+    const fromHandle = Boolean(e.target.closest('[data-task-handle]'));
+    if (e.pointerType === 'touch' && !fromHandle) return;
 
-    e.preventDefault();
+    if (fromHandle) e.preventDefault();
     const pointerId = e.pointerId;
-    try { handleEl.setPointerCapture(pointerId); } catch {}
+    const handleEl = cardEl;
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -531,7 +561,13 @@ export function createBoardAndInboxController({
       if (!movedEnough && Math.hypot(dx, dy) < 6) return;
       if (!movedEnough) {
         movedEnough = true;
-        pickedCardId = null;
+        try { cardEl.setPointerCapture(pointerId); } catch {}
+        window.getSelection?.()?.removeAllRanges();
+        if (pickedCardId) {
+          pickedCardId = null;
+          boardEl.classList.remove('has-picked');
+          boardEl.querySelectorAll('.task-card.is-picked').forEach(el => el.classList.remove('is-picked'));
+        }
         document.documentElement.classList.add('is-dragging-task');
         cardEl.classList.add('is-dragging');
       }
@@ -558,15 +594,15 @@ export function createBoardAndInboxController({
       const wasDrag = movedEnough;
       const finalStatus = targetStatus;
       const finalBefore = beforeCardId;
+      const dropRect = wasDrag ? cardEl.getBoundingClientRect() : null;
       cleanup();
 
-      if (!wasDrag) {
-        // Short click/tap on handle -> toggle Pick Mode ("카드를 픽해서 옮기기")!
-        setPickedCard(pickedCardId === cardId ? null : cardId, true);
-        return;
-      }
+      // A short click/tap is handled by the card's click listener (pick / put down)
+      if (!wasDrag) return;
 
-      await executeCardMove(cardId, finalStatus, finalBefore, true);
+      suppressCardClickUntil = Date.now() + 350;
+      if (pickedCardId) { pickedCardId = null; renderTaskBoard(); }
+      await executeCardMove(cardId, finalStatus, finalBefore, true, dropRect);
     };
 
     document.addEventListener('pointermove', onMove);
@@ -586,12 +622,9 @@ export function createBoardAndInboxController({
 
     // Place picked card via column banner button
     container.querySelectorAll('[data-place-picked-col]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!pickedCardId) return;
-        const id = pickedCardId;
-        pickedCardId = null;
-        renderTaskBoard();
-        await executeCardMove(id, btn.dataset.placePickedCol, null, true);
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        await placePickedCard(btn.dataset.placePickedCol, null);
       });
     });
 
@@ -609,7 +642,7 @@ export function createBoardAndInboxController({
         const status = form.dataset.quickCardForm;
         input.disabled = true;
         try {
-          await saveTaskCard(null, { title, status, description: '', color: 'sage', due_date: '', assignee_id: '' });
+          await saveTaskCard(null, { title, status, description: '', color: 'yellow', due_date: '', assignee_id: '' });
           input.value = '';
         } finally {
           input.disabled = false;
@@ -618,10 +651,15 @@ export function createBoardAndInboxController({
       });
     });
 
-    // Drag handles: pointer drag + keyboard Grab-Move-Drop
+    // Whole sticky note: pointer drag (mouse/pen anywhere, touch via ✋ handle)
+    if (!boardReadOnly) {
+      container.querySelectorAll('.task-card').forEach(cardEl => {
+        cardEl.addEventListener('pointerdown', e => startPointerDrag(e, cardEl));
+      });
+    }
+
+    // Handles: keyboard Grab-Move-Drop
     container.querySelectorAll('[data-task-handle]').forEach(handle => {
-      const cardEl = handle.closest('.task-card');
-      handle.addEventListener('pointerdown', e => startPointerDrag(e, handle, cardEl));
       handle.addEventListener('keydown', async e => {
         const cardId = handle.dataset.taskHandle;
         if (e.key === ' ' || e.key === 'Enter') {
@@ -662,49 +700,73 @@ export function createBoardAndInboxController({
       });
     });
 
-    // Reveal whole card on keyboard focus
-    container.addEventListener('focusin', e => {
-      const card = e.target.closest?.('.task-card');
-      if (card && e.target.matches?.(':focus-visible') && card.getAnimations().length === 0) {
-        card.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      }
-    });
-
-    // Clicking a card: if another card is currently Picked, place it right before this card! Otherwise open editor.
-    container.querySelectorAll('[data-task-open]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const targetId = btn.dataset.taskOpen;
-        if (pickedCardId) {
-          if (pickedCardId === targetId) {
-            setPickedCard(null);
-            return;
-          }
-          const targetCard = boardCards.find(c => c.id === targetId);
-          if (targetCard) {
-            const movingId = pickedCardId;
-            pickedCardId = null;
-            renderTaskBoard();
-            await executeCardMove(movingId, targetCard.status, targetCard.id, true);
-          }
-          return;
-        }
-        const card = boardCards.find(c => c.id === targetId);
+    // Edit button opens the editor (never picks)
+    container.querySelectorAll('[data-task-edit]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (pickedCardId) setPickedCard(null);
+        const card = boardCards.find(c => c.id === btn.dataset.taskEdit);
         if (card) openTaskCardDialog(card, card.status);
       });
     });
 
-    // Clicking an empty column area while a card is picked places it at the end of that column
-    container.querySelectorAll('.task-card-list').forEach(list => {
-      list.addEventListener('click', async e => {
-        if (!pickedCardId) return;
-        if (e.target.closest('.task-card')) return;
-        const movingId = pickedCardId;
-        const status = list.dataset.cardList;
-        pickedCardId = null;
-        renderTaskBoard();
-        await executeCardMove(movingId, status, null, true);
+    // Clicking a sticky note: pick it up / put it down / drop the picked note before it
+    container.querySelectorAll('.task-card').forEach(cardEl => {
+      cardEl.addEventListener('click', async e => {
+        if (Date.now() < suppressCardClickUntil) return;
+        const targetId = cardEl.dataset.taskId;
+        if (boardReadOnly) {
+          const card = boardCards.find(c => c.id === targetId);
+          if (card) openTaskCardDialog(card, card.status);
+          return;
+        }
+        // Keyboard activation of the handle is handled by its keydown listener
+        if (e.detail === 0 && e.target.closest('[data-task-handle]')) return;
+        if (!pickedCardId) {
+          setPickedCard(targetId, true);
+          return;
+        }
+        if (pickedCardId === targetId) {
+          setPickedCard(null, true);
+          return;
+        }
+        const targetCard = boardCards.find(c => c.id === targetId);
+        if (targetCard) await placePickedCard(targetCard.status, targetCard.id);
+      });
+      cardEl.addEventListener('dblclick', e => {
+        if (e.target.closest('[data-task-edit]')) return;
+        if (pickedCardId) setPickedCard(null);
+        const card = boardCards.find(c => c.id === cardEl.dataset.taskId);
+        if (card) openTaskCardDialog(card, card.status);
       });
     });
+
+    // Clicking anywhere in a column while a note is picked drops it at the end of that column
+    container.querySelectorAll('.task-column').forEach(colEl => {
+      colEl.addEventListener('click', async e => {
+        if (!pickedCardId) return;
+        if (e.target.closest('.task-card, button, input, form')) return;
+        await placePickedCard(colEl.dataset.colStatus, null);
+      });
+    });
+
+    // Board-wide keys (bound once): Escape puts the picked note back down
+    if (!boardKeysBound) {
+      boardKeysBound = true;
+      document.addEventListener('keydown', e => {
+        if (e.key !== 'Escape' || !pickedCardId || activeDrag) return;
+        if (document.querySelector('dialog[open]')) return;
+        e.preventDefault();
+        setPickedCard(null, true);
+        announceBoard(getLocale() === 'en' ? 'Move cancelled.' : '카드 이동을 취소했어요.');
+      });
+      container.addEventListener('focusin', e => {
+        const card = e.target.closest?.('.task-card');
+        if (card && e.target.matches?.(':focus-visible') && card.getAnimations().length === 0) {
+          card.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+      });
+    }
   }
 
   // ==========================================
@@ -729,7 +791,7 @@ export function createBoardAndInboxController({
     form.elements.status.value = card?.status || defaultStatus;
     form.elements.description.value = card?.description || '';
     form.elements.due_date.value = card?.due_date || '';
-    form.elements.color.value = EVENT_COLORS.includes(card?.color) ? card.color : 'sage';
+    form.elements.color.value = EVENT_COLORS.includes(card?.color) ? card.color : 'yellow';
 
     const assigneeSelect = $('#task-card-assignee');
     if (assigneeSelect) {
@@ -767,7 +829,7 @@ export function createBoardAndInboxController({
           status: payload.status || 'todo',
           title: payload.title,
           description: payload.description || '',
-          color: payload.color || 'sage',
+          color: payload.color || 'yellow',
           due_date: payload.due_date || '',
           assignee_id: null,
           assignee_name: '',

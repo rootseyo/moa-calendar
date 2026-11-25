@@ -855,7 +855,7 @@ dialog#event-dialog .event-reminder-select{
 /* Multi-Calendar Selection & Color Picker */
 .calendar-item-row{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;transition:background .12s;position:relative;width:100%;margin-bottom:1px}
 .calendar-item-row:hover{background:#edf2ea}
-.calendar-item-row.is-current{background:#e5ede2;font-weight:600}
+.calendar-item-row.is-current{background:color-mix(in srgb,var(--green) 12%,var(--surface));font-weight:600}
 .calendar-check-toggle{display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;min-width:12px;border-radius:2.5px;border:1px solid #b2c2ad;background:#fff;cursor:pointer;padding:0;color:#fff;font-size:7.5px;font-weight:700;line-height:1;transition:all .12s;flex-shrink:0;outline:none;-webkit-tap-highlight-color:transparent}
 .calendar-check-toggle:hover{border-color:var(--green)}
 .calendar-check-toggle.checked{background:var(--green);border-color:var(--green);color:var(--on-primary)}
@@ -868,7 +868,7 @@ dialog#event-dialog .event-reminder-select{
 .calendar-title-btn{display:flex;align-items:center;gap:6px;flex:1;min-width:0;text-align:left;padding:2px 0;cursor:pointer;border:0;outline:none;background:none;color:inherit;font-size:12px}
 .calendar-title-btn:focus,.calendar-title-btn:focus-visible{outline:none}
 .calendar-name-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.owner-pill{margin-left:auto;color:#7a8a76;font-size:9.5px;background:#e5eee2;padding:1px 4px;border-radius:3px;font-weight:500;flex-shrink:0}
+.owner-pill{margin-left:auto;color:var(--muted);font-size:9.5px;background:color-mix(in srgb,var(--green) 10%,var(--surface));padding:1px 4px;border-radius:3px;font-weight:500;flex-shrink:0}
 
 /* Calendar Color Dot Backgrounds */
 .calendar-color-dot-btn.sage{background:#368a4c}
@@ -1838,7 +1838,6 @@ dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
 .task-board-title-group p{margin:4px 0 0;line-height:1.5}
 .task-board-header-actions{display:flex;align-items:center;gap:8px}
 
-.task-pick-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:11px;background:color-mix(in srgb,var(--green) 13%,var(--surface,#fff));border:1.5px solid var(--green);font-size:12.5px}
 .small-btn{padding:6px 11px!important;font-size:11.5px!important;min-height:30px}
 
 .task-board-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
@@ -1855,8 +1854,6 @@ dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
 .task-col-add-btn{font-size:16px;padding:3px 7px;color:var(--muted)}
 .task-col-add-btn:hover{color:var(--green);background:var(--surface,#fff)}
 
-.task-column-drop-here{width:100%;padding:8px 10px;border-radius:9px;border:1.5px dashed var(--green);background:color-mix(in srgb,var(--green) 10%,var(--surface,#fff));color:var(--green);font-size:11.5px;font-weight:700;text-align:center}
-.task-column-drop-here:hover{background:var(--green);color:var(--on-primary)}
 
 .task-card-list{position:relative;display:flex;flex-direction:column;gap:9px;min-height:120px;padding:2px}
 .task-card-list[data-drop="true"]::after{content:"";position:fixed;left:var(--drop-x,0);top:var(--drop-y,0);width:var(--drop-w,160px);height:3px;border-radius:999px;background:var(--green);box-shadow:0 0 0 2px color-mix(in srgb,var(--green) 25%,transparent);pointer-events:none;z-index:50}
@@ -1864,39 +1861,10 @@ dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
 
 .task-column-empty{display:flex;align-items:center;justify-content:center;min-height:96px;border-radius:10px;border:1px dashed var(--border);color:var(--muted);font-size:12px}
 
-.task-card{position:relative;display:flex;flex-direction:column;gap:7px;padding:11px 12px;border-radius:11px;background:var(--surface,#fff);border:1px solid var(--border);border-left:4px solid var(--green);box-shadow:0 2px 6px rgba(20,35,28,.05);scroll-margin:12px;transition:box-shadow .15s,border-color .15s,transform .15s}
-.task-card:last-child{margin-bottom:6px}
-.task-card.sage{border-left-color:#5a8f70}
-.task-card.blue{border-left-color:#4d82d6}
-.task-card.peach{border-left-color:#e28b5b}
-.task-card.lavender{border-left-color:#8f6fd4}
-.task-card.coral{border-left-color:#db5f64}
-.task-card.rose{border-left-color:#d86a9e}
-.task-card.yellow{border-left-color:#d5a730}
-.task-card.teal{border-left-color:#349e94}
-.task-card.orange{border-left-color:#e07b39}
-.task-card.cyan{border-left-color:#3199c7}
-.task-card.indigo{border-left-color:#5c6bc0}
-.task-card.slate{border-left-color:#6b7c8c}
 
-.task-card:has(.task-card-handle:focus-visible){outline:3px solid #8caf94;outline-offset:2px}
-.task-card.is-picked{border-color:var(--green);box-shadow:0 10px 24px rgba(35,66,50,.18);transform:scale(1.02);z-index:5}
-.task-card.is-dragging{z-index:40;box-shadow:0 16px 34px rgba(20,35,28,.24);transform:scale(1.025);pointer-events:none;opacity:.96}
 html.is-dragging-task,html.is-dragging-task *{cursor:grabbing!important}
 
-.task-card-top{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:start}
-.task-card-handle{display:inline-flex;align-items:center;justify-content:center;width:26px;height:28px;border-radius:7px;color:var(--muted);opacity:.72;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;font-size:15px;outline:none}
-.task-card-handle:is(:hover,:focus-visible){opacity:1;background:var(--surface-subtle,#eef2eb);color:var(--green)}
-.task-card-handle[aria-pressed="true"]{opacity:1;background:var(--green);color:var(--on-primary)}
 
-.task-card-body-btn{display:block;width:100%;text-align:left;padding:2px 0}
-.task-card-title{display:block;font-size:13px;font-weight:650;line-height:1.45;color:var(--text)}
-.task-card-desc{margin:4px 0 0;font-size:11.5px;line-height:1.5;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.task-card-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding-top:4px;border-top:1px solid color-mix(in srgb,var(--border) 65%,transparent);font-size:11px;color:var(--muted)}
-.task-card-assignee{display:inline-flex;align-items:center;gap:5px;font-weight:600}
-.task-mini-avatar{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:color-mix(in srgb,var(--green) 18%,var(--surface,#fff));color:var(--green);font-size:10px;font-weight:700}
-.task-card-key-hint{display:none;font-size:10px;color:var(--muted)}
-.task-card:has(.task-card-handle:focus-visible) .task-card-key-hint,.task-card.is-picked .task-card-key-hint{display:block}
 
 .task-quick-card-form input{padding:9px 11px;font-size:12px;border-radius:9px;background:var(--surface,#fff);border:1px dashed var(--border)}
 .task-quick-card-form input:focus{border-style:solid;border-color:var(--green)}
@@ -1933,3 +1901,92 @@ html.is-dragging-task,html.is-dragging-task *{cursor:grabbing!important}
  .topbar-board-toggle{padding:6px 9px;font-size:11px}
  .inbox-item-detail{padding-left:13px}
 }
+
+/* ============================================================
+   Task Board: sticky notes (포스트잇) + pick-up / drag / land
+   ============================================================ */
+.task-column{position:relative}
+.task-card-list{gap:14px;padding:10px 4px 6px}
+.task-card{
+ --note:#fff3a3;--tilt:-1.2deg;
+ --note-ink:#2d2a1f;--note-ink-soft:rgba(45,42,31,.68);--note-rule:rgba(45,42,31,.14);
+ --note-shadow:0 1px 1px rgba(0,0,0,.06),0 8px 12px -8px rgba(30,25,10,.38);
+ --note-shadow-lifted:0 22px 30px -10px rgba(30,25,10,.42),0 8px 14px rgba(30,25,10,.14);
+ position:relative;display:flex;flex-direction:column;gap:8px;min-height:96px;padding:16px 14px 12px;
+ border:0;border-radius:2px 2px 4px 14px/2px 2px 4px 8px;
+ background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 38%),var(--note);
+ color:var(--note-ink);box-shadow:var(--note-shadow);rotate:var(--tilt);
+ cursor:grab;-webkit-user-select:none;user-select:none;scroll-margin:16px;
+ transition:rotate .18s ease,scale .18s ease,box-shadow .18s ease,opacity .15s
+}
+.task-card:nth-child(3n+2){--tilt:1deg}
+.task-card:nth-child(3n){--tilt:-.4deg}
+.task-card:last-child{margin-bottom:6px}
+/* tape strip */
+.task-card::before{content:"";position:absolute;top:-8px;left:50%;width:54px;height:17px;translate:-50% 0;rotate:-3deg;background:rgba(255,255,255,.58);border-left:1px dashed rgba(0,0,0,.06);border-right:1px dashed rgba(0,0,0,.06);box-shadow:0 1px 2px rgba(0,0,0,.08);pointer-events:none}
+.task-card.sage{--note:#dcefd6}
+.task-card.blue{--note:#d5e5fb}
+.task-card.peach{--note:#ffdcc4}
+.task-card.lavender{--note:#e6dcfb}
+.task-card.coral{--note:#ffd3d0}
+.task-card.rose{--note:#fbd6e8}
+.task-card.yellow{--note:#fff3a3}
+.task-card.teal{--note:#cbefe8}
+.task-card.orange{--note:#ffe0b5}
+.task-card.cyan{--note:#cfeef9}
+.task-card.indigo{--note:#d9def8}
+.task-card.slate{--note:#e1e6eb}
+:root[data-theme="dark"] .task-card{background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,0) 38%),color-mix(in srgb,var(--note) 80%,#000);--note-shadow:0 1px 1px rgba(0,0,0,.3),0 10px 14px -8px rgba(0,0,0,.7);--note-shadow-lifted:0 24px 32px -10px rgba(0,0,0,.75),0 8px 14px rgba(0,0,0,.4)}
+:root[data-theme="dark"] .task-card::before{background:rgba(255,255,255,.26)}
+.task-card.is-readonly{cursor:pointer}
+
+.task-card:hover{rotate:0deg;scale:1.02;box-shadow:0 2px 2px rgba(0,0,0,.06),0 14px 18px -10px rgba(30,25,10,.4)}
+:root[data-theme="dark"] .task-card:hover{box-shadow:0 2px 2px rgba(0,0,0,.3),0 14px 18px -10px rgba(0,0,0,.75)}
+.task-card:has(.task-card-handle:focus-visible),.task-card:has(.task-card-edit:focus-visible){outline:3px solid #8caf94;outline-offset:3px}
+
+/* Picked up: the note lifts off the board */
+.task-card.is-picked{rotate:-2.5deg;scale:1.07;translate:0 -10px;z-index:6;box-shadow:var(--note-shadow-lifted);outline:2px solid var(--green);outline-offset:4px;cursor:pointer;animation:postit-lift .3s cubic-bezier(.2,.9,.3,1.25) backwards}
+@keyframes postit-lift{from{rotate:var(--tilt);scale:1;translate:0 0;box-shadow:var(--note-shadow);outline-color:transparent}}
+/* Dragging: lifted higher and tilted the other way */
+.task-card.is-dragging{z-index:40;rotate:3deg;scale:1.09;box-shadow:var(--note-shadow-lifted);pointer-events:none;opacity:.97;transition:rotate .15s ease,scale .15s ease}
+html.is-dragging-task,html.is-dragging-task *{cursor:grabbing!important}
+/* Landing: settles back onto the board */
+.task-card.is-dropped{animation:postit-land .32s cubic-bezier(.3,1.35,.5,1) backwards}
+@keyframes postit-land{from{rotate:-2.5deg;scale:1.07;box-shadow:var(--note-shadow-lifted)}}
+
+/* While a note is held, other notes and columns become drop spots */
+.task-board-columns.has-picked .task-card:not(.is-picked){cursor:pointer;opacity:.9}
+.task-board-columns.has-picked .task-card:not(.is-picked):hover{opacity:1}
+.task-column.is-drop-target{border-style:dashed;border-color:color-mix(in srgb,var(--green) 60%,var(--border));cursor:pointer}
+.task-column.is-drop-target:hover{border-color:var(--green);background:color-mix(in srgb,var(--green) 9%,var(--surface-subtle))}
+.task-column-drop-here{width:100%;padding:10px;border-radius:10px;border:1.5px dashed var(--green);background:color-mix(in srgb,var(--green) 10%,var(--surface));color:var(--green);font-size:12px;font-weight:700;text-align:center;transition:background .15s,color .15s}
+.task-column-drop-here:hover,.task-column.is-drop-target:hover .task-column-drop-here{background:var(--green);color:var(--on-primary)}
+
+/* Note contents */
+.task-card-top{position:absolute;top:5px;right:5px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.task-card:is(:hover,:focus-within,.is-picked) .task-card-top{opacity:1}
+@media(hover:none){.task-card-top{opacity:1}}
+.task-card-handle,.task-card-edit{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;color:var(--note-ink-soft);font-size:13px;outline:none}
+.task-card-handle{cursor:grab;touch-action:none}
+.task-card-handle:is(:hover,:focus-visible),.task-card-edit:is(:hover,:focus-visible){background:rgba(255,255,255,.55);color:var(--note-ink)}
+.task-card-handle[aria-pressed="true"]{background:var(--green);color:var(--on-primary)}
+.task-card-body{padding-right:52px}
+.task-card-title{display:block;font-size:13.5px;font-weight:700;line-height:1.45;color:var(--note-ink);word-break:break-word}
+.task-card-desc{margin:5px 0 0;font-size:12px;line-height:1.55;color:var(--note-ink-soft);white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.task-card-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:6px;border-top:1px dashed var(--note-rule);font-size:11px;color:var(--note-ink-soft)}
+.task-card-assignee{display:inline-flex;align-items:center;gap:5px;font-weight:600}
+.task-mini-avatar{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.6);color:var(--note-ink);font-size:10px;font-weight:700}
+.task-card-key-hint{font-size:10.5px;font-weight:600;color:var(--note-ink-soft)}
+
+/* Floating "holding a note" banner — fixed, so picking never shifts the layout */
+.task-pick-banner{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));translate:-50% 0;z-index:60;display:flex;align-items:center;gap:12px;width:max-content;max-width:calc(100vw - 24px);padding:10px 12px 10px 16px;border-radius:999px;background:var(--surface);color:var(--text);border:1.5px solid var(--green);box-shadow:0 12px 30px rgba(0,0,0,.18);font-size:12.5px;animation:pick-banner-in .22s ease-out backwards}
+.task-pick-banner strong{max-width:220px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+@keyframes pick-banner-in{from{opacity:0;translate:-50% 12px}}
+@media(max-width:600px){.task-pick-banner{bottom:calc(84px + env(safe-area-inset-bottom));border-radius:14px}}
+
+@media(prefers-reduced-motion:reduce){
+ .task-card,.task-card.is-dragging{transition:none}
+ .task-card.is-picked,.task-card.is-dropped,.task-pick-banner{animation:none}
+}
+@media(forced-colors:active){.task-card{border:1px solid CanvasText}.task-card.is-picked{outline-color:Highlight}}
+@media(hover:none){.task-pick-banner .kbd-hint{display:none}}
