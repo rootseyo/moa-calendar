@@ -1,4 +1,4 @@
-import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261125-growth-v1';
+import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261125-growth-v2';
 import { english } from './translations.js?v=20261125-growth-v1';
 import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261125-growth-v1';
 import { getHoliday, getActiveRegion, getRegionName } from './holidays.js?v=20261028-instant-calendar-v1';
@@ -1885,7 +1885,6 @@ function renderSelectedDate(){
  $('#agenda-add').disabled=!defaultCalendar();
  renderDateNote();
  renderMonthNote();
- renderGeneralNote();
 }
 
 function renderMobileMenu(){
