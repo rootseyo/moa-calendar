@@ -1,6 +1,6 @@
 // Frontend module for Direct Messages (쪽지함) and Task Board (pick-and-move + pointer drag-and-drop)
 
-import { EVENT_COLORS } from './event-utils.js?v=20261127-board-v2';
+import { EVENT_COLORS } from './event-utils.js?v=20261127-board-v4';
 
 export const TASK_COLUMNS = [
   { id: 'todo', ko: '할 일', en: 'To Do' },
@@ -146,6 +146,8 @@ export function createBoardAndInboxController({
   // Active pointer drag state
   let activeDrag = null;
   let boardKeysBound = false;
+  // Card being edited in place on its sticky note
+  let inlineEditingId = null;
 
   // Inbox state
   let inboxBox = 'inbox'; // 'inbox' | 'sent' | 'compose'
@@ -300,6 +302,7 @@ export function createBoardAndInboxController({
     const classes = ['task-card', 'postit', color, isPicked ? 'is-picked' : '', justDropped ? 'is-dropped' : '', boardReadOnly ? 'is-readonly' : ''].filter(Boolean).join(' ');
 
     return `<article class="${classes}" data-task-id="${esc(card.id)}" data-task-status="${esc(card.status)}" tabindex="0" role="button" aria-pressed="${isPicked}" aria-label="${esc(label)}" title="${en ? 'Click to edit · hold or drag to pick up' : '클릭하면 편집 · 길게 누르거나 끌면 픽'}">
+      ${boardReadOnly ? '' : `<button type="button" class="task-card-edit" data-task-edit="${esc(card.id)}" aria-label="${esc(en ? `Detailed edit: ${card.title}` : `${card.title} 자세히 편집`)}" title="${en ? 'Detailed edit' : '자세히 편집'}"><span aria-hidden="true">✎</span></button>`}
       ${key || calendarTag ? `<div class="task-card-top"><span class="task-card-key">${esc(key)}</span>${calendarTag}</div>` : ''}
       <div class="task-card-body">
         <strong class="task-card-title">${mentionHtml(card.title)}</strong>
@@ -673,6 +676,73 @@ export function createBoardAndInboxController({
     document.addEventListener('keydown', onKeyDown, true);
   }
 
+  // Edit title + memo right on the sticky note. Enter / clicking away saves, Esc cancels.
+  function startInlineEdit(cardEl, card) {
+    if (inlineEditingId || boardReadOnly) return;
+    const body = cardEl.querySelector('.task-card-body');
+    if (!body) return;
+    const en = getLocale() === 'en';
+    inlineEditingId = card.id;
+    cardEl.classList.add('is-editing');
+    const original = body.innerHTML;
+    body.innerHTML = `<div class="task-inline-edit">
+      <textarea class="task-inline-title" rows="1" maxlength="120" aria-label="${en ? 'Card title' : '카드 제목'}"></textarea>
+      <textarea class="task-inline-desc" rows="3" maxlength="2000" placeholder="${en ? 'Notes… (@name to mention)' : '메모… (@이름으로 멘션)'}" aria-label="${en ? 'Notes' : '메모'}"></textarea>
+      <span class="task-inline-hint">${en ? 'Enter to save · Esc to cancel' : 'Enter 저장 · Esc 취소'}</span>
+    </div>`;
+    const titleEl = body.querySelector('.task-inline-title');
+    const descEl = body.querySelector('.task-inline-desc');
+    titleEl.value = card.title || '';
+    descEl.value = card.description || '';
+    bindMentionAutocomplete(titleEl);
+    bindMentionAutocomplete(descEl);
+    const fit = el => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; };
+    [titleEl, descEl].forEach(el => { fit(el); el.addEventListener('input', () => fit(el)); });
+    titleEl.focus();
+    titleEl.setSelectionRange(titleEl.value.length, titleEl.value.length);
+
+    let finished = false;
+    const finish = async save => {
+      if (finished) return;
+      finished = true;
+      closeMentionMenu();
+      inlineEditingId = null;
+      const title = titleEl.value.trim();
+      const description = descEl.value.trim();
+      const changed = title !== (card.title || '') || description !== (card.description || '');
+      if (!save || !changed || !title) {
+        cardEl.classList.remove('is-editing');
+        body.innerHTML = original;
+        if (save && !title) toast(en ? 'A card needs a title.' : '카드 제목을 입력해 주세요.');
+        return;
+      }
+      try {
+        await saveTaskCard(card.id, { title, description });
+      } catch (err) {
+        toast(err.message);
+        renderTaskBoard();
+      }
+    };
+    cardEl.addEventListener('focusout', () => {
+      setTimeout(() => {
+        if (!finished && !cardEl.contains(document.activeElement)) finish(true);
+      }, 0);
+    });
+    cardEl.addEventListener('keydown', e => {
+      if (e.target !== titleEl && e.target !== descEl) return;
+      if (e.isComposing || e.defaultPrevented || mentionMenu) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(false);
+        cardEl.focus({ preventScroll: true });
+      } else if (e.key === 'Enter' && (e.target === titleEl || e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        finish(true);
+      }
+    });
+  }
+
   // Hold a card still for a moment (mouse or touch) to pick it up without dragging.
   const LONG_PRESS_MS = 380;
   function startLongPress(e, cardEl) {
@@ -751,7 +821,7 @@ export function createBoardAndInboxController({
     // Whole sticky note: pointer drag (mouse/pen anywhere, touch via ✋ handle)
     if (!boardReadOnly) {
       container.querySelectorAll('.task-card').forEach(cardEl => {
-        cardEl.addEventListener('pointerdown', e => { startLongPress(e, cardEl); startPointerDrag(e, cardEl); });
+        cardEl.addEventListener('pointerdown', e => { if (e.target.closest('[data-task-edit], .task-inline-edit')) return; startLongPress(e, cardEl); startPointerDrag(e, cardEl); });
         cardEl.addEventListener('contextmenu', e => { if (e.pointerType === 'touch' || pickedCardId) e.preventDefault(); });
       });
     }
@@ -765,7 +835,8 @@ export function createBoardAndInboxController({
         if (!card) return;
         if (e.key === 'Enter' && pickedCardId !== cardId) {
           e.preventDefault();
-          openTaskCardDialog(card, card.status);
+          if (boardReadOnly) openTaskCardDialog(card, card.status);
+          else startInlineEdit(cardEl, card);
           return;
         }
         if (boardReadOnly) return;
@@ -805,13 +876,24 @@ export function createBoardAndInboxController({
       });
 
       // One click edits the card; while another card is picked, a click drops the picked card here
-      cardEl.addEventListener('click', async () => {
-        if (Date.now() < suppressCardClickUntil) return;
+      cardEl.addEventListener('click', async e => {
+        if (e.target.closest('.task-inline-edit')) return;
         const targetId = cardEl.dataset.taskId;
         const targetCard = boardCards.find(c => c.id === targetId);
         if (!targetCard) return;
-        if (!pickedCardId || boardReadOnly) {
+        if (e.target.closest('[data-task-edit]')) {
+          e.stopPropagation();
+          if (pickedCardId) setPickedCard(null);
           openTaskCardDialog(targetCard, targetCard.status);
+          return;
+        }
+        if (Date.now() < suppressCardClickUntil) return;
+        if (boardReadOnly) {
+          openTaskCardDialog(targetCard, targetCard.status);
+          return;
+        }
+        if (!pickedCardId) {
+          startInlineEdit(cardEl, targetCard);
           return;
         }
         if (pickedCardId === targetId) {
@@ -930,7 +1012,7 @@ export function createBoardAndInboxController({
         mentionMenu.className = 'mention-menu';
         mentionMenu.setAttribute('role', 'listbox');
         mentionMenu.addEventListener('mousedown', e => e.preventDefault());
-        field.closest('dialog')?.append(mentionMenu);
+        (field.closest('dialog') || document.body).append(mentionMenu);
       }
       mentionMenu.dataset.owner = field.name;
       const r = field.getBoundingClientRect();
@@ -1395,7 +1477,7 @@ export function createBoardAndInboxController({
   }
 
   function handleTasksStreamEvent() {
-    if (workspaceMode === 'board' && !activeDrag) {
+    if (workspaceMode === 'board' && !activeDrag && !inlineEditingId) {
       loadTaskBoard().catch(() => {});
     }
   }

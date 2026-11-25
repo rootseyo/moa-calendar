@@ -2185,3 +2185,25 @@ html[data-boot="guest"] .boot-splash{display:flex;align-items:center;justify-con
 .mention-menu .task-mini-avatar{background:var(--green);color:var(--on-primary)}
 .task-mention-hint{margin:4px 0 0;font-size:11.5px;color:var(--muted)}
 .inbox-link-btn{display:inline-flex;align-items:center;gap:6px}
+
+/* Inline sticky-note editing + hover pencil for the detailed editor */
+.task-card-edit{position:absolute;top:4px;right:4px;z-index:2;width:26px;height:26px;border-radius:7px;border:0;background:rgba(255,255,255,.6);color:var(--note-ink);display:inline-flex;align-items:center;justify-content:center;font-size:13px;opacity:0;cursor:pointer;transition:opacity .15s}
+:root[data-theme="dark"] .task-card-edit{background:rgba(0,0,0,.35)}
+.task-card:is(:hover,:focus-within) .task-card-edit{opacity:1}
+@media(hover:none){.task-card-edit{opacity:1}}
+.task-card-edit:is(:hover,:focus-visible){background:var(--green);color:var(--on-primary)}
+.task-card.is-editing{cursor:text;user-select:auto;-webkit-user-select:auto;outline:2px solid var(--green);outline-offset:3px;rotate:0deg;scale:1.02}
+.task-card.is-editing .task-card-edit{display:none}
+.task-inline-edit{display:flex;flex-direction:column;gap:4px}
+.task-inline-edit textarea{width:100%;resize:none;overflow:hidden;border:0;border-radius:6px;background:rgba(255,255,255,.55);color:var(--note-ink);font:inherit;padding:4px 6px;line-height:1.45;outline:none;box-shadow:inset 0 0 0 1px var(--note-rule)}
+:root[data-theme="dark"] .task-inline-edit textarea{background:rgba(0,0,0,.25)}
+.task-inline-edit textarea:focus{box-shadow:inset 0 0 0 2px var(--green)}
+.task-inline-edit .task-inline-title{font-size:13.5px;font-weight:700}
+.task-inline-edit .task-inline-desc{font-size:12px}
+.task-inline-hint{font-size:10.5px;color:var(--note-ink-soft)}
+/* Detailed editor: keep the board visible behind it */
+#task-card-dialog::backdrop{background:transparent;backdrop-filter:none}
+#task-card-dialog{box-shadow:0 24px 70px rgba(20,30,25,.38),0 0 0 1px var(--border)}
+
+.login-legal-links .donate-link{color:var(--green);font-weight:700}
+a.settings-donate-link{display:block;text-decoration:none}

@@ -814,6 +814,8 @@ Object.assign(english, {
  "진행 내용이나 참고 링크를 적어주세요. @이름으로 멤버를 멘션할 수 있어요.": "Add notes or reference links. Type @name to mention a member.",
  "접근할 수 없는 캘린더예요.": "You cannot access that calendar.",
  "카드 삭제": "Delete card",
+ "☕ 후원하기": "☕ Donate",
+ "☕후원하기": "☕Donate",
  "모아 캘린더 | 공유 캘린더 · 쪽지 · Task Board": "Moa Calendar | Shared Calendar · Messages · Task Board",
  "가족, 친구, 팀의 일정을 한곳에서 모아보세요. 모아 캘린더는 초대 링크로 함께 쓰는 실시간 공유 캘린더에 1:1 쪽지함과 포스트잇 Task Board(할 일 보드)까지 더해 일정과 할 일을 함께 관리하는 서비스입니다.": "Bring family, friends and team schedules together. Moa Calendar is a real-time shared calendar you join with an invite link, plus 1:1 messages and a sticky-note Task Board to manage plans and to-dos together.",
  "링크 하나로 초대하고 일정은 실시간으로 공유, 할 일은 Task Board로, 대화는 쪽지로 함께하세요.": "Invite with one link, share schedules in real time, track to-dos on the Task Board and chat with direct messages.",

@@ -1,4 +1,4 @@
-import { EVENT_COLORS, repeatEventRanges } from './event-utils.js?v=20261127-board-v2';
+import { EVENT_COLORS, repeatEventRanges } from './event-utils.js?v=20261127-board-v4';
 
 export const SANDBOX_CALENDAR_ID = 'sandbox-default';
 export const SANDBOX_STORAGE_KEY = 'moa_sandbox_state_v1';
