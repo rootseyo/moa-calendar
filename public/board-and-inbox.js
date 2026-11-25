@@ -1,6 +1,6 @@
 // Frontend module for Direct Messages (쪽지함) and Task Board (pick-and-move + pointer drag-and-drop)
 
-import { EVENT_COLORS } from './event-utils.js?v=20261125-board-inbox-v1';
+import { EVENT_COLORS } from './event-utils.js?v=20261125-theme-v1';
 
 export const TASK_COLUMNS = [
   { id: 'todo', ko: '할 일', en: 'To Do' },

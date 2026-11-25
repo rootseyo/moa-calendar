@@ -1,35 +1,32 @@
-import { translateSource, translateError } from './translations.js?v=20261125-board-inbox-v1';
+import { translateSource, translateError } from './translations.js?v=20261125-theme-v1';
 
-// Apply saved color-scheme preference immediately before first paint (CSP-safe, no inline script).
-export function applyColorScheme(value){
- const meta=document.querySelector('meta[name="color-scheme"]');
- const content=value==='dark'||value==='light'?value:'light dark';
- if(meta)meta.setAttribute('content',content);
- const themeMeta=document.querySelector('meta[name="theme-color"]');
- if(themeMeta){
-  const isDark=content==='dark'||(content==='light dark'&&window.matchMedia?.('(prefers-color-scheme: dark)').matches);
-  themeMeta.setAttribute('content',isDark?'#1a2420':'#38664e');
- }
+// Theme: only 'light' (default) and 'dark' are supported. Initial paint is handled by /theme.js.
+export const THEMES=['light','dark'];
+const THEME_COLORS={light:'#38664e',dark:'#1a2420'};
+const normalizeTheme=value=>value==='dark'?'dark':'light';
+export function applyTheme(value){
+ const theme=normalizeTheme(value);
+ const root=document.documentElement;
+ root.setAttribute('data-theme',theme);
+ root.style.colorScheme=theme;
+ document.querySelector('meta[name="color-scheme"]')?.setAttribute('content',theme);
+ document.querySelector('meta[name="theme-color"]')?.setAttribute('content',THEME_COLORS[theme]);
+ return theme;
 }
-export function getColorSchemePreference(){
- try{
-  const saved=localStorage.getItem('color-scheme');
-  return saved==='dark'||saved==='light'?saved:'system';
- }catch{return 'system';}
+export function getTheme(){
+ try{return normalizeTheme(localStorage.getItem('color-scheme'));}catch{return 'light';}
 }
-export function setColorSchemePreference(mode){
+export function setTheme(value){
+ const theme=normalizeTheme(value);
  try{
-  if(mode==='dark'||mode==='light')localStorage.setItem('color-scheme',mode);
+  if(theme==='dark')localStorage.setItem('color-scheme','dark');
   else localStorage.removeItem('color-scheme');
  }catch{}
- applyColorScheme(mode==='dark'||mode==='light'?mode:'light dark');
+ return applyTheme(theme);
 }
-applyColorScheme(getColorSchemePreference()==='system'?'light dark':getColorSchemePreference());
+applyTheme(getTheme());
 window.addEventListener('storage',e=>{
- if(e.key==='color-scheme')applyColorScheme(e.newValue||'light dark');
-});
-window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{
- if(getColorSchemePreference()==='system')applyColorScheme('light dark');
+ if(e.key==='color-scheme')applyTheme(e.newValue);
 });
 
 const publicEnglish=/^\/en\/?$/.test(location.pathname);
@@ -98,7 +95,7 @@ document.addEventListener('change',event=>{
  }
 });
 // Do not await: app.js imports this module for locale helpers.
-import(locale==='en'?'/app.en.js?v=20261125-board-inbox-v1':'/app.js?v=20261125-board-inbox-v1').catch(error=>{
+import(locale==='en'?'/app.en.js?v=20261125-theme-v1':'/app.js?v=20261125-theme-v1').catch(error=>{
  const app=document.querySelector('#app');
  app.replaceChildren();
  const wrap=document.createElement('main');wrap.className='loading';

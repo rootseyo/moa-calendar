@@ -738,7 +738,6 @@ Object.assign(english, {
  "예: 내일 오후 7시 @강남역 저녁약속 #약속 (단축키 Q)": "e.g., Tomorrow 7pm @Downtown Dinner #personal (Shortcut Q)",
  "빠른 등록": "Quick add",
  "화면 테마": "Theme",
- "시스템 설정 따르기": "Follow system",
  "라이트 모드": "Light mode",
  "다크 모드": "Dark mode",
  "표시 언어와 공휴일을 확인할 지역, 화면 테마를 선택하세요.": "Choose your display language, holiday region, and color theme.",

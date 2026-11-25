@@ -166,12 +166,19 @@ test('Phase 2 UI, Dark Mode, IME-safe Quick Add, and Offline Service Worker are 
   const swJs = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 
   // Dark mode guidance compliance
-  assert.match(html, /<meta name="color-scheme" content="light dark">/);
+  const themeJs = readFileSync(new URL('../public/theme.js', import.meta.url), 'utf8');
+  assert.match(html, /<meta name="color-scheme" content="light">/);
+  assert.match(html, /<script src="\/theme\.js\?v=[^"]+"><\/script>\s*<link rel="stylesheet" href="\/style\.css/);
   assert.match(html, /id="theme-preference-select"/);
-  assert.match(css, /color-scheme:light dark/);
-  assert.match(css, /:root:has\(> head > meta\[name="color-scheme"\]\[content="dark"\]\)/);
-  assert.match(css, /light-dark\(/);
-  assert.match(localeJs, /applyColorScheme/);
+  assert.match(html, /<option value="light">라이트 모드<\/option><option value="dark">다크 모드<\/option><\/select>/);
+  assert.doesNotMatch(html, /value="system"/);
+  assert.match(css, /:root,:root\[data-theme="light"\]\{\n color-scheme:light;/);
+  assert.match(css, /:root\[data-theme="dark"\]\{\n color-scheme:dark;/);
+  assert.doesNotMatch(css, /prefers-color-scheme/);
+  assert.doesNotMatch(css, /meta\[name="color-scheme"\]/);
+  assert.match(themeJs, /setAttribute\('data-theme',theme\)/);
+  assert.match(localeJs, /export function setTheme/);
+  assert.doesNotMatch(localeJs, /prefers-color-scheme/);
   assert.match(localeJs, /addEventListener\('storage'/);
 
   // Quick Add + IME safety + Location maps + Briefing UI
