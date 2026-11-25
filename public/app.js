@@ -1,6 +1,6 @@
-import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261102-time-range-v1';
-import { english } from './translations.js?v=20261028-instant-calendar-v1';
-import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261028-instant-calendar-v1';
+import { locale, translateMessage, languageControl, getColorSchemePreference, setColorSchemePreference } from './locale.js?v=20261125-growth-v1';
+import { english } from './translations.js?v=20261125-growth-v1';
+import { EVENT_COLORS, shiftLocalDateTime, weeklyEventRanges, repeatEventRanges, isValidLocalDateTime, calculateDdayDiff, formatDdayLabel, sortDdayEvents, moveDdayOrder, resolveAdjustedEndDateTime } from './event-utils.js?v=20261125-growth-v1';
 import { getHoliday, getActiveRegion, getRegionName } from './holidays.js?v=20261028-instant-calendar-v1';
 import { formatKoreanLunarDate, getKoreanLunarDate } from './lunar.js?v=20261028-instant-calendar-v1';
 import { WEATHER_PRESET_LOCATIONS, parseOpenMeteoDaily, renderWeatherBadgeHtml, renderHourlyWeatherItemsHtml, getSavedWeatherLocation, saveWeatherLocation, isWeatherEnabled, setWeatherEnabled, getWeatherLocationDisplayName, buildOpenMeteoForecastUrl, buildOpenMeteoGeocodingUrl } from './weather.js?v=20261028-cancel-v1';

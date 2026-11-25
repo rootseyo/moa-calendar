@@ -16,6 +16,8 @@ import {
   loadCalendarEventsByFeedToken,
 } from '../account-and-feeds.mjs';
 import { formatIcsCalendar } from '../ical.mjs';
+import { translateSource } from '../public/translations.js';
+import { execFileSync } from 'node:child_process';
 
 const hash = x => createHash('sha256').update(x).digest('hex');
 
@@ -175,4 +177,10 @@ test('sendPasswordResetEmail dispatches HTML + text email via Resend API when RE
     if (prevFrom === undefined) delete process.env.RESEND_FROM;
     else process.env.RESEND_FROM = prevFrom;
   }
+});
+
+test('translated English bundle (app.en.js) has valid JS module syntax', () => {
+  const appJs = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const translated = translateSource(appJs);
+  execFileSync(process.execPath, ['--input-type=module', '--check'], { input: translated });
 });
